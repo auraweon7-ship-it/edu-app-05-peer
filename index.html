@@ -405,8 +405,15 @@
               </div>
             </div>
           </div>
-          <label class="block"><span class="block text-xs font-bold mb-1.5">학생 화면에 열 팀 <span class="font-normal text-mute">(발표 순서에 맞춰 바꾸면 학생 화면이 바로 바뀝니다)</span></span>
-            <select id="liveFocus" class="field"></select></label>
+          <div class="sunk rounded-2xl p-3 space-y-2">
+            <p id="liveNow" class="text-sm font-bold" aria-live="polite"></p>
+            <div class="flex flex-col min-[480px]:flex-row gap-2">
+              <select id="liveFocus" class="field flex-1 min-w-0" aria-label="발표할 팀"></select>
+              <button id="liveGo" type="button" class="pill pill-dark px-5 text-sm font-semibold whitespace-nowrap">▶ 발표 시작</button>
+              <button id="liveEnd" type="button" class="pill px-5 text-sm whitespace-nowrap">■ 평가 마감</button>
+            </div>
+            <p class="text-[11px] text-mute leading-relaxed">팀을 고르고 <b class="text-ink">발표 시작</b>을 누르면 학생 화면에 그 팀만 열리고 발표 타이머가 함께 시작됩니다. 발표 팀 학생은 본인 팀을 평가할 수 없습니다.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -548,6 +555,8 @@
 
 <script>
 // 화면·저장 파일에 표시되는 앱 버전. 수정할 때마다 올림: 새 기능 → 둘째 자리, 고침·디자인 → 셋째 자리
+// v1.7.0  발표 시작/평가 마감: 교수가 연 팀만 학생이 평가(서버 쪽에서도 거절), 발표 시작 시 타이머 자동 시작,
+//         본인 팀 평가 금지 강화(소속 팀 + 팀원 명단 이름 확인)
 // v1.6.0  QR 실시간 평가(PeerJS: 교수 화면이 방, 학생 휴대폰이 직접 접속·제출 즉시 집계, 발표 팀 지정),
 //         점수 체계 변경: 학생 점수(항목 평균 합산 → 30점 만점) + 교수 점수(70점 만점) = 100점, 학생 : 교수 비율 설정
 // v1.5.2  소개 문구에서 샘플 팀·샘플 평가 안내 문장 삭제
@@ -559,7 +568,7 @@
 // v1.2.0  STEP 3: 루브릭 편집기·AI 루브릭 추천, 팀 일괄 등록·순서 섞기, 자기 팀·중복 평가 차단, 발표 타이머, 극단값 보정·교수 점수 비율
 // v1.1.0  STEP 2: Claude·OpenAI·Gemini 연결 확인·모델 제안, AI 종합 피드백, 키 저장 끄기·삭제, COURSE INFO, 접기·펼치기
 // v1.0.0  STEP 1: 팀 선택·별점+슬라이더 평가·한 줄 피드백·순위표·막대그래프·CSV, 샘플 팀 5개·평가 20건
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.7.0';
 // ?live=방ID 로 열리면 학생 실시간 평가 화면으로 작동
 const LIVE_ID = new URLSearchParams(location.search).get('live');
 
@@ -698,7 +707,7 @@ const S = {
   course: { univ: '', dept: '', prof: '', course: '' },
   collapsed: { ai: false, course: false, rubric: false, teams: false, opt: false },
   formMode: 'all', trim: true, peerPts: 30, timerMin: 5,
-  liveBase: '', liveId: '', liveOn: false, liveFocus: '',
+  liveBase: '', liveId: '', liveOn: false, liveFocus: '', liveNext: '',
   role: 'student', evaluator: { name: '', sid: '', dept: '', team: '' },
   setId: 'sample', setTitle: '', sampleMode: true,
   rubric: defaultRubric(), teams: [], evals: [], ai: {}, history: []
@@ -708,7 +717,7 @@ function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (!s || typeof s !== 'object') return;
-    for (const k of ['provider', 'remember', 'formMode', 'trim', 'peerPts', 'timerMin', 'role', 'setId', 'setTitle', 'sampleMode', 'liveBase', 'liveId', 'liveOn', 'liveFocus'])
+    for (const k of ['provider', 'remember', 'formMode', 'trim', 'peerPts', 'timerMin', 'role', 'setId', 'setTitle', 'sampleMode', 'liveBase', 'liveId', 'liveOn', 'liveFocus', 'liveNext'])
       if (k in s && typeof s[k] === typeof S[k]) S[k] = s[k];
     if (!PROVIDERS[S.provider]) S.provider = 'claude';
     for (const k of ['models', 'keys', 'course', 'collapsed', 'evaluator', 'ai'])
@@ -1817,6 +1826,8 @@ function studentRuntime(D, K, net) {
       const v = { name: $('sName').value.trim(), dept: $('sDept').value.trim(), sid: $('sSid').value.trim(), team: $('sTeam').value };
       const miss = [['sName', v.name, '성명'], ['sDept', v.dept, '학과'], ['sSid', v.sid, '학번'], ['sTeam', v.team, '소속 팀']].find(x => !x[1]);
       if (miss) { $('sErr').textContent = `${miss[2]}을(를) 입력하세요.`; $('sErr').classList.remove('hidden'); $(miss[0]).setAttribute('aria-invalid', 'true'); $(miss[0]).focus(); return; }
+      const listed = D.teams.find(t => (t.members || []).includes(v.name)); // 팀원 명단과 소속 팀이 다르면 막음
+      if (listed && listed.id !== v.team) { $('sErr').textContent = `팀 명단에는 ${v.name} 님이 ${listed.name} 소속으로 되어 있습니다. 소속 팀을 확인하세요.`; $('sErr').classList.remove('hidden'); $('sTeam').focus(); return; }
       if (st.me && st.me.sid !== v.sid) st.done = {}; // 다른 학생이면 진행 기록 초기화
       st.me = v;
       persist();
@@ -1826,21 +1837,27 @@ function studentRuntime(D, K, net) {
   }
 
   let cur = null, scores = {}, stepIdx = 0;
+  // 본인 팀: 고른 소속 팀이거나 팀원 명단에 이름이 있는 팀
+  const isOwn = t => t.id === st.me?.team || (t.members || []).includes(st.me?.name);
   function board() {
-    const targets = D.teams.filter(t => t.id !== st.me.team);
+    const targets = D.teams.filter(t => !isOwn(t));
     const left = targets.filter(t => !st.done[t.id]);
-    const focus = net && D.focus && targets.some(t => t.id === D.focus) ? D.focus : '';
-    if (focus) cur = st.done[focus] ? null : focus; // 교수가 지정한 발표 팀만 평가
+    // 실시간 모드: 교수가 "발표 시작"으로 연 팀만 평가, 본인 팀이면 평가 불가
+    const focusTeam = net ? D.teams.find(t => t.id === D.focus) : null;
+    const ownFocus = !!focusTeam && isOwn(focusTeam);
+    if (net) cur = focusTeam && !ownFocus && !st.done[focusTeam.id] ? focusTeam.id : null;
     else if (!cur || st.done[cur] || !targets.some(t => t.id === cur)) cur = left[0]?.id || null;
     const doneN = targets.length - left.length;
-    const focusTeam = D.teams.find(t => t.id === D.focus);
+    const waitMsg = !net || cur ? '' : !focusTeam ? '⏸ 교수님이 발표를 시작하면 평가할 팀이 열립니다. 잠시 기다려 주세요.'
+      : ownFocus ? `🙅 지금은 본인 팀(${focusTeam.name}) 발표입니다. 본인 팀은 평가할 수 없어요. 다음 발표를 기다려 주세요.`
+      : `✔ ${focusTeam.name} 평가를 제출했습니다. 다음 발표를 기다려 주세요.`;
     app.innerHTML = head() + `<section class="glass rounded-3xl p-4 sm:p-5 space-y-3">
       <div class="flex flex-wrap items-center gap-2"><p class="text-sm font-bold mr-auto">${esc(st.me.name)} <span class="text-xs font-normal text-mute">${esc(st.me.dept)} · ${esc(st.me.sid)} · ${esc(D.teams.find(t => t.id === st.me.team)?.name || '')}</span></p>
         <button id="sWho" type="button" class="pill sm px-3 text-[11px]">정보 수정</button></div>
       <div class="flex items-center gap-3"><div class="tbar flex-1"><i style="width:${targets.length ? doneN / targets.length * 100 : 0}%"></i></div><span class="font-disp text-xs font-semibold">${doneN} / ${targets.length}</span></div>
-      ${net && D.focus ? `<p class="sunk rounded-2xl px-3 py-2 text-[12px]">🎤 지금 발표: <b>${esc(focusTeam?.name || '')}</b>${D.focus === st.me.team ? ' (자기 팀이라 평가하지 않습니다)' : ''}</p>` : ''}
+      ${net ? `<p class="sunk rounded-2xl px-3 py-2 text-[12px]">${focusTeam ? `🎤 지금 발표: <b>${esc(focusTeam.name)}</b> ${esc(focusTeam.topic || '')}${ownFocus ? ' · 본인 팀' : ''}` : '⏸ 발표 대기 중'}</p>` : ''}
       <div class="flex flex-wrap gap-2">${targets.map(t => {
-        const off = !!st.done[t.id] || (focus && t.id !== focus) || (net && D.focus === st.me.team);
+        const off = !!st.done[t.id] || (net && t.id !== cur);
         return `<button type="button" class="tchip ${st.done[t.id] ? 'done' : ''}" data-t="${esc(t.id)}" aria-pressed="${t.id === cur}" ${off ? 'disabled' : ''}>${st.done[t.id] ? '✔ ' : ''}${esc(t.name)}</button>`;
       }).join('')}</div>
     </section>
@@ -1854,14 +1871,14 @@ function studentRuntime(D, K, net) {
     $('sWho').onclick = intro;
     app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { cur = b.dataset.t; board(); });
     $('sSave').onclick = saveResult;
-    renderForm(focus && !cur ? 'focusDone' : '');
+    renderForm(waitMsg);
   }
-  function renderForm(state) {
+  function renderForm(waitMsg) {
     const box = $('formBox'), t = D.teams.find(x => x.id === cur);
     if (!t) {
       box.className = '';
-      box.innerHTML = state === 'focusDone' || (net && D.focus)
-        ? '<div class="glass rounded-3xl p-5 text-sm font-semibold text-center">⏳ 다음 발표 팀을 기다리는 중입니다. 교수님이 팀을 열면 화면이 바로 바뀝니다.</div>'
+      box.innerHTML = waitMsg
+        ? `<div class="glass rounded-3xl p-5 sm:p-6 text-sm font-semibold text-center leading-relaxed">${esc(waitMsg)}</div>`
         : '<div class="glass-ok rounded-3xl p-5 text-sm font-semibold">✔ 평가할 팀을 모두 평가했습니다.</div>';
       return;
     }
@@ -1932,7 +1949,13 @@ function studentRuntime(D, K, net) {
       if (m.set.setId !== D.setId) { st.done = {}; persist(); }
       Object.assign(D, m.set);
       rerender();
-    } else if (m.type === 'focus') { D.focus = m.teamId; if (st.me) board(); }
+    } else if (m.type === 'focus') {
+      D.focus = m.teamId;
+      const t = D.teams.find(x => x.id === m.teamId);
+      if (st.me && t) toast(isOwn(t) ? `${t.name}(본인 팀) 발표 시작 · 평가하지 않습니다` : `🎤 ${t.name} 발표 시작! 평가해 주세요`);
+      else if (st.me) toast('평가가 마감되었습니다.');
+      if (st.me) board();
+    }
     else if (m.type === 'state') { // 교수 화면에 이미 접수된 팀
       (m.done || []).forEach(id => { if (!st.done[id]) st.done[id] = { teamId: id, synced: true }; });
       persist();
@@ -2050,15 +2073,44 @@ function renderLive() {
   const on = !!live.peer;
   $('liveIdle').classList.toggle('hidden', on);
   $('liveOn').classList.toggle('hidden', !on);
-  $('liveFocus').innerHTML = `<option value="">모든 팀 (학생이 직접 골라 평가)</option>` +
-    S.teams.map((t, i) => `<option value="${esc(t.id)}" ${t.id === S.liveFocus ? 'selected' : ''}>${i + 1}. ${esc(t.name)} · ${esc(t.topic)}</option>`).join('');
   if (S.liveFocus && !teamById(S.liveFocus)) S.liveFocus = '';
+  const pick = S.liveFocus || (teamById(S.liveNext) ? S.liveNext : S.teams[0]?.id || '');
+  $('liveFocus').innerHTML = S.teams.map((t, i) => `<option value="${esc(t.id)}" ${t.id === pick ? 'selected' : ''}>${i + 1}. ${esc(t.name)} · ${esc(t.topic)}</option>`).join('');
   if (on) {
     $('liveUrl').textContent = liveUrl();
     drawQr($('liveQr'), 168);
     renderLiveStats();
   }
+  renderLiveNow();
 }
+// 지금 발표 중인 팀과 도착한 평가 수
+function renderLiveNow() {
+  const t = teamById(S.liveFocus);
+  const n = t ? curEvals().filter(e => e.teamId === t.id && e.source === 'live').length : 0;
+  $('liveNow').textContent = t ? `🎤 지금 발표: ${t.name} · 학생 평가 ${n}건 도착` : '⏸ 대기 중 — 발표할 팀을 고르고 "발표 시작"을 누르세요';
+  $('liveGo').textContent = t ? '▶ 다른 팀 발표 시작' : '▶ 발표 시작';
+  $('liveEnd').disabled = !t;
+}
+function setLiveFocus(id) {
+  S.liveFocus = id;
+  if (id) { const i = S.teams.findIndex(t => t.id === id); S.liveNext = S.teams[i + 1]?.id || ''; }
+  save();
+  liveBroadcast({ type: 'focus', teamId: id });
+  renderLive();
+}
+$('liveGo').onclick = () => {
+  const t = teamById($('liveFocus').value);
+  if (!t) return;
+  setLiveFocus(t.id);
+  resetTimer();
+  $('timerStart').click(); // 발표 타이머도 함께 시작
+  toast(`🎤 ${t.name} 발표 시작 · 학생 화면에 ${t.name} 평가가 열렸습니다.`);
+};
+$('liveEnd').onclick = () => {
+  const t = teamById(S.liveFocus);
+  setLiveFocus('');
+  toast(`${t?.name || ''} 평가를 마감했습니다. 다음 팀을 고르고 발표 시작을 누르세요.`);
+};
 $('liveBase').addEventListener('input', () => { S.liveBase = $('liveBase').value.trim(); save(); renderLiveBaseNote(); });
 function startLive() {
   if (!window.Peer) return setNote($('liveBaseNote'), 'ng', '✘ 실시간 연결 모듈(PeerJS)을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.');
@@ -2126,7 +2178,11 @@ function acceptLiveEval(m) {
   if (m.setId !== S.setId) return { ok: false, msg: '평가 세트가 바뀌었습니다. 화면을 새로고침하세요.' };
   if (!t) return { ok: false, msg: '등록되지 않은 팀입니다.' };
   if (!ev.name || !ev.sid) return { ok: false, msg: '성명과 학번이 필요합니다.' };
-  if (ev.team === t.id) return { ok: false, msg: '자기 팀은 평가할 수 없습니다.' };
+  // 본인 팀 금지: 고른 소속 팀이거나 팀원 명단에 이름이 있으면 거절
+  if (ev.team === t.id || t.members.includes(String(ev.name).trim())) return { ok: false, msg: '본인 팀은 평가할 수 없습니다.' };
+  // 교수가 "발표 시작"으로 연 팀만 받음
+  if (!S.liveFocus) return { ok: false, msg: '지금은 평가 시간이 아닙니다. 교수님이 발표를 시작하면 평가할 수 있어요.' };
+  if (t.id !== S.liveFocus) return { ok: false, msg: `지금은 ${teamById(S.liveFocus)?.name || ''} 발표를 평가하는 시간입니다.` };
   if (curEvals().some(e => e.teamId === t.id && e.role !== 'prof' && evKey(e.evaluator) === k)) return { ok: false, dup: true, msg: '이미 평가한 팀입니다.' };
   const scores = Object.fromEntries(S.rubric.map(c => [c.id, Math.min(5, Math.max(1, Math.round(+m.scores?.[c.id]) || 3))]));
   S.evals.push({ id: uid('e'), setId: S.setId, teamId: t.id, role: 'student', source: 'live', scores, feedback: String(m.feedback || '').slice(0, 200), at: Date.now(),
@@ -2137,6 +2193,7 @@ function acceptLiveEval(m) {
   renderTeamSelect();
   renderDashboard();
   renderLiveStats();
+  renderLiveNow();
   toast(`📡 ${ev.name} → ${t.name} 평가 도착`);
   return { ok: true };
 }
@@ -2144,12 +2201,6 @@ $('liveStart').onclick = startLive;
 $('liveStop').onclick = stopLive;
 $('liveCopy').onclick = () => {
   navigator.clipboard?.writeText(liveUrl()).then(() => toast('입장 주소를 복사했습니다.'), () => toast('복사하지 못했습니다. 주소를 길게 눌러 복사하세요.'));
-};
-$('liveFocus').onchange = () => {
-  S.liveFocus = $('liveFocus').value;
-  save();
-  liveBroadcast({ type: 'focus', teamId: S.liveFocus });
-  toast(S.liveFocus ? `학생 화면에 ${teamById(S.liveFocus)?.name}을(를) 열었습니다.` : '학생이 팀을 직접 고르도록 바꿨습니다.');
 };
 function openQrModal() {
   const size = Math.max(200, Math.min(520, Math.floor(Math.min(innerWidth, innerHeight) * 0.58)));
