@@ -406,13 +406,16 @@
             </div>
           </div>
           <div class="sunk rounded-2xl p-3 space-y-2">
-            <p id="liveNow" class="text-sm font-bold" aria-live="polite"></p>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p id="liveNow" class="text-sm font-bold" aria-live="polite"></p>
+              <span id="liveClock" class="hidden font-disp text-2xl font-semibold tabular-nums" aria-label="발표 남은 시간"></span>
+            </div>
             <div class="flex flex-col min-[480px]:flex-row gap-2">
               <select id="liveFocus" class="field flex-1 min-w-0" aria-label="발표할 팀"></select>
-              <button id="liveGo" type="button" class="pill pill-dark px-5 text-sm font-semibold whitespace-nowrap">▶ 발표 시작</button>
+              <button id="liveGo" type="button" class="pill pill-dark px-5 text-sm font-semibold whitespace-nowrap">▶ 지정팀 발표 시작</button>
               <button id="liveEnd" type="button" class="pill px-5 text-sm whitespace-nowrap">■ 평가 마감</button>
             </div>
-            <p class="text-[11px] text-mute leading-relaxed">팀을 고르고 <b class="text-ink">발표 시작</b>을 누르면 학생 화면에 그 팀만 열리고 발표 타이머가 함께 시작됩니다. 발표 팀 학생은 본인 팀을 평가할 수 없습니다.</p>
+            <p class="text-[11px] text-mute leading-relaxed">팀을 고르고 <b class="text-ink">지정팀 발표 시작</b>을 누르면 학생 휴대폰에 그 팀만 열리고 발표 카운트다운이 교수 화면과 학생 휴대폰에서 함께 시작됩니다. 발표 팀 학생은 본인 팀을 평가할 수 없습니다.</p>
           </div>
         </div>
       </div>
@@ -555,6 +558,7 @@
 
 <script>
 // 화면·저장 파일에 표시되는 앱 버전. 수정할 때마다 올림: 새 기능 → 둘째 자리, 고침·디자인 → 셋째 자리
+// v1.7.1  "지정팀 발표 시작" 버튼, 발표 카운트다운을 교수 LIVE 패널·학생 휴대폰에 함께 표시, 학생 화면에는 지정 팀만 표시
 // v1.7.0  발표 시작/평가 마감: 교수가 연 팀만 학생이 평가(서버 쪽에서도 거절), 발표 시작 시 타이머 자동 시작,
 //         본인 팀 평가 금지 강화(소속 팀 + 팀원 명단 이름 확인)
 // v1.6.0  QR 실시간 평가(PeerJS: 교수 화면이 방, 학생 휴대폰이 직접 접속·제출 즉시 집계, 발표 팀 지정),
@@ -568,7 +572,7 @@
 // v1.2.0  STEP 3: 루브릭 편집기·AI 루브릭 추천, 팀 일괄 등록·순서 섞기, 자기 팀·중복 평가 차단, 발표 타이머, 극단값 보정·교수 점수 비율
 // v1.1.0  STEP 2: Claude·OpenAI·Gemini 연결 확인·모델 제안, AI 종합 피드백, 키 저장 끄기·삭제, COURSE INFO, 접기·펼치기
 // v1.0.0  STEP 1: 팀 선택·별점+슬라이더 평가·한 줄 피드백·순위표·막대그래프·CSV, 샘플 팀 5개·평가 20건
-const APP_VERSION = 'v1.7.0';
+const APP_VERSION = 'v1.7.1';
 // ?live=방ID 로 열리면 학생 실시간 평가 화면으로 작동
 const LIVE_ID = new URLSearchParams(location.search).get('live');
 
@@ -1229,7 +1233,21 @@ function renderTimer() {
   $('timerChips').innerHTML = TIMER_OPTIONS.map(m => `<label class="chip cursor-pointer"><input type="radio" name="tmin" value="${m}" class="sr-only" ${m === S.timerMin ? 'checked' : ''}>
     <span class="rounded-full glass-chip text-sm font-semibold font-disp">${m}분</span></label>`).join('');
   $('timerChips').querySelectorAll('input').forEach(r => r.onchange = () => { S.timerMin = +r.value; save(); resetTimer(); });
+  renderLiveClock();
 }
+// 남은 시간(초): 진행 중이면 종료 시각 기준으로 계산
+const timerLeft = () => Math.max(0, timer.running ? (timer.endAt - Date.now()) / 1000 : timer.left);
+function renderLiveClock() {
+  const el = $('liveClock'), on = !!S.liveFocus && (timer.running || timer.left < timer.total);
+  el.classList.toggle('hidden', !on);
+  if (!on) return;
+  const left = Math.ceil(timerLeft());
+  el.textContent = left ? `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}` : '시간 종료';
+  el.style.color = left <= 30 ? 'rgb(208,84,74)' : '';
+}
+// 학생 휴대폰도 같은 카운트다운을 보도록 남은 시간을 보냄 (기기 시계 차이를 피하려고 절대 시각 대신 남은 초)
+const timerPayload = () => ({ running: timer.running, left: timerLeft(), total: timer.total });
+function liveTimerSync() { if (live.peer) liveBroadcast({ type: 'timer', timer: timerPayload() }); }
 function tick() {
   timer.left = (timer.endAt - Date.now()) / 1000;
   if (timer.left <= 0) {
@@ -1240,6 +1258,7 @@ function tick() {
     $('timer').classList.add('end');
     $('timerSub').textContent = '⏰ 발표 시간이 끝났습니다.';
     K.chime();
+    liveTimerSync();
   }
   renderTimer();
 }
@@ -1258,6 +1277,7 @@ $('timerStart').onclick = () => {
     $('timerSub').textContent = `${S.timerMin}분 발표 진행 중 · 마지막 30초는 빨갛게 깜빡입니다.`;
   }
   renderTimer();
+  liveTimerSync();
 };
 function resetTimer() {
   clearInterval(timer.id);
@@ -1265,6 +1285,7 @@ function resetTimer() {
   $('timer').classList.remove('end', 'warn');
   $('timerSub').textContent = '시작을 누르면 발표 시간을 잽니다. 마지막 30초는 빨갛게 깜빡입니다.';
   renderTimer();
+  liveTimerSync();
 }
 $('timerReset').onclick = resetTimer;
 
@@ -1855,11 +1876,10 @@ function studentRuntime(D, K, net) {
       <div class="flex flex-wrap items-center gap-2"><p class="text-sm font-bold mr-auto">${esc(st.me.name)} <span class="text-xs font-normal text-mute">${esc(st.me.dept)} · ${esc(st.me.sid)} · ${esc(D.teams.find(t => t.id === st.me.team)?.name || '')}</span></p>
         <button id="sWho" type="button" class="pill sm px-3 text-[11px]">정보 수정</button></div>
       <div class="flex items-center gap-3"><div class="tbar flex-1"><i style="width:${targets.length ? doneN / targets.length * 100 : 0}%"></i></div><span class="font-disp text-xs font-semibold">${doneN} / ${targets.length}</span></div>
-      ${net ? `<p class="sunk rounded-2xl px-3 py-2 text-[12px]">${focusTeam ? `🎤 지금 발표: <b>${esc(focusTeam.name)}</b> ${esc(focusTeam.topic || '')}${ownFocus ? ' · 본인 팀' : ''}` : '⏸ 발표 대기 중'}</p>` : ''}
-      <div class="flex flex-wrap gap-2">${targets.map(t => {
-        const off = !!st.done[t.id] || (net && t.id !== cur);
-        return `<button type="button" class="tchip ${st.done[t.id] ? 'done' : ''}" data-t="${esc(t.id)}" aria-pressed="${t.id === cur}" ${off ? 'disabled' : ''}>${st.done[t.id] ? '✔ ' : ''}${esc(t.name)}</button>`;
-      }).join('')}</div>
+      ${net ? `<div class="sunk rounded-2xl px-3 py-2 flex items-center gap-3"><p class="text-[12px] min-w-0 flex-1">${focusTeam ? `🎤 지금 발표: <b>${esc(focusTeam.name)}</b> ${esc(focusTeam.topic || '')}${ownFocus ? ' · 본인 팀' : ''}` : '⏸ 발표 대기 중'}</p>
+        <span id="lvTimer" class="font-disp text-xl font-semibold tabular-nums flex-none" aria-label="발표 남은 시간"></span></div>` : ''}
+      ${net ? '' : `<div class="flex flex-wrap gap-2">${targets.map(t => // 실시간 모드에서는 교수가 지정한 팀만 보여 줌
+        `<button type="button" class="tchip ${st.done[t.id] ? 'done' : ''}" data-t="${esc(t.id)}" aria-pressed="${t.id === cur}" ${st.done[t.id] ? 'disabled' : ''}>${st.done[t.id] ? '✔ ' : ''}${esc(t.name)}</button>`).join('')}</div>`}
     </section>
     <section id="formBox"></section>
     <section class="glass rounded-3xl p-4 sm:p-5 space-y-3">
@@ -1872,6 +1892,7 @@ function studentRuntime(D, K, net) {
     app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { cur = b.dataset.t; board(); });
     $('sSave').onclick = saveResult;
     renderForm(waitMsg);
+    if (net) drawClock();
   }
   function renderForm(waitMsg) {
     const box = $('formBox'), t = D.teams.find(x => x.id === cur);
@@ -1943,12 +1964,25 @@ function studentRuntime(D, K, net) {
     toast('결과 파일을 저장했습니다.');
   }
   const rerender = () => (st.me ? board() : intro());
+  // 교수 화면의 발표 카운트다운을 그대로 표시
+  let clock = null;
+  const setClock = t => { clock = t ? { ...t, at: Date.now() } : null; drawClock(); };
+  function drawClock() {
+    const el = $('lvTimer');
+    if (!el) return;
+    if (!clock || !D.focus || (!clock.running && clock.left >= clock.total)) { el.textContent = ''; return; }
+    const left = Math.max(0, Math.ceil(clock.left - (clock.running ? (Date.now() - clock.at) / 1000 : 0)));
+    el.textContent = left ? `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}` : '시간 종료';
+    el.style.color = left <= 30 ? 'rgb(208,84,74)' : '';
+  }
+  if (net) { setClock(D.timer); setInterval(drawClock, 500); }
   if (net) net.onMessage(m => {
     if (m.type === 'net') { online = m.ok; if (m.ok && st.me) net.send({ type: 'join', evaluator: st.me }); rerender(); }
     else if (m.type === 'hello') { // 교수가 루브릭·팀을 바꾸면 다시 받음
       if (m.set.setId !== D.setId) { st.done = {}; persist(); }
       Object.assign(D, m.set);
       rerender();
+      setClock(D.timer);
     } else if (m.type === 'focus') {
       D.focus = m.teamId;
       const t = D.teams.find(x => x.id === m.teamId);
@@ -1956,6 +1990,7 @@ function studentRuntime(D, K, net) {
       else if (st.me) toast('평가가 마감되었습니다.');
       if (st.me) board();
     }
+    else if (m.type === 'timer') setClock(m.timer);
     else if (m.type === 'state') { // 교수 화면에 이미 접수된 팀
       (m.done || []).forEach(id => { if (!st.done[id]) st.done[id] = { teamId: id, synced: true }; });
       persist();
@@ -2047,7 +2082,7 @@ function renderLiveBaseNote() {
   }
 }
 function liveSet() {
-  return { app: 'peerscore', setId: S.setId, title: S.setTitle, course: S.course, rubric: S.rubric, teams: S.teams, version: APP_VERSION, focus: S.liveFocus || '' };
+  return { app: 'peerscore', setId: S.setId, title: S.setTitle, course: S.course, rubric: S.rubric, teams: S.teams, version: APP_VERSION, focus: S.liveFocus || '', timer: timerPayload() };
 }
 function liveBroadcast(msg) { live.conns.forEach(c => { try { if (c.open) c.send(msg); } catch {} }); }
 function liveSync() { if (live.peer) liveBroadcast({ type: 'hello', set: liveSet() }); } // 루브릭·팀이 바뀌면 학생 화면도 갱신
@@ -2087,8 +2122,8 @@ function renderLive() {
 function renderLiveNow() {
   const t = teamById(S.liveFocus);
   const n = t ? curEvals().filter(e => e.teamId === t.id && e.source === 'live').length : 0;
-  $('liveNow').textContent = t ? `🎤 지금 발표: ${t.name} · 학생 평가 ${n}건 도착` : '⏸ 대기 중 — 발표할 팀을 고르고 "발표 시작"을 누르세요';
-  $('liveGo').textContent = t ? '▶ 다른 팀 발표 시작' : '▶ 발표 시작';
+  $('liveNow').textContent = t ? `🎤 지금 발표: ${t.name} · 학생 평가 ${n}건 도착` : '⏸ 대기 중 — 발표할 팀을 고르고 "지정팀 발표 시작"을 누르세요';
+  $('liveGo').textContent = '▶ 지정팀 발표 시작';
   $('liveEnd').disabled = !t;
 }
 function setLiveFocus(id) {
@@ -2108,6 +2143,7 @@ $('liveGo').onclick = () => {
 };
 $('liveEnd').onclick = () => {
   const t = teamById(S.liveFocus);
+  resetTimer();
   setLiveFocus('');
   toast(`${t?.name || ''} 평가를 마감했습니다. 다음 팀을 고르고 발표 시작을 누르세요.`);
 };
