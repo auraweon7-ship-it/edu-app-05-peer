@@ -558,6 +558,7 @@
 
 <script>
 // 화면·저장 파일에 표시되는 앱 버전. 수정할 때마다 올림: 새 기능 → 둘째 자리, 고침·디자인 → 셋째 자리
+// v1.7.2  실시간 입장 화면에서 팀 선택 제거: 학생은 평가만, 소속 팀은 팀 명단 이름으로 자동 확인(띄어쓰기 무시)
 // v1.7.1  "지정팀 발표 시작" 버튼, 발표 카운트다운을 교수 LIVE 패널·학생 휴대폰에 함께 표시, 학생 화면에는 지정 팀만 표시
 // v1.7.0  발표 시작/평가 마감: 교수가 연 팀만 학생이 평가(서버 쪽에서도 거절), 발표 시작 시 타이머 자동 시작,
 //         본인 팀 평가 금지 강화(소속 팀 + 팀원 명단 이름 확인)
@@ -572,7 +573,7 @@
 // v1.2.0  STEP 3: 루브릭 편집기·AI 루브릭 추천, 팀 일괄 등록·순서 섞기, 자기 팀·중복 평가 차단, 발표 타이머, 극단값 보정·교수 점수 비율
 // v1.1.0  STEP 2: Claude·OpenAI·Gemini 연결 확인·모델 제안, AI 종합 피드백, 키 저장 끄기·삭제, COURSE INFO, 접기·펼치기
 // v1.0.0  STEP 1: 팀 선택·별점+슬라이더 평가·한 줄 피드백·순위표·막대그래프·CSV, 샘플 팀 5개·평가 20건
-const APP_VERSION = 'v1.7.1';
+const APP_VERSION = 'v1.7.2';
 // ?live=방ID 로 열리면 학생 실시간 평가 화면으로 작동
 const LIVE_ID = new URLSearchParams(location.search).get('live');
 
@@ -1816,6 +1817,7 @@ function studentRuntime(D, K, net) {
   const $ = id => document.getElementById(id), esc = K.esc, app = $('app');
   const KEY = `peerscore-student-${D.setId}`;
   let st = { me: null, done: {}, mode: 'all' };
+  const sameName = (a, b) => !!a && !!b && String(a).replace(/\s+/g, '') === String(b).replace(/\s+/g, ''); // 띄어쓰기 차이는 같은 이름으로
   try { st = { ...st, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch {}
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {} };
   const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2400); };
@@ -1836,19 +1838,24 @@ function studentRuntime(D, K, net) {
         <label class="block"><span class="block text-xs font-bold mb-1.5">성명</span><input id="sName" class="field" autocomplete="name" value="${esc(me.name || '')}"></label>
         <label class="block"><span class="block text-xs font-bold mb-1.5">학과</span><input id="sDept" class="field" value="${esc(me.dept || '')}"></label>
         <label class="block"><span class="block text-xs font-bold mb-1.5">학번</span><input id="sSid" class="field font-disp" inputmode="numeric" value="${esc(me.sid || '')}"></label>
-        <label class="block"><span class="block text-xs font-bold mb-1.5">소속 팀</span><select id="sTeam" class="field"><option value="">팀 선택</option>${D.teams.map(t => `<option value="${esc(t.id)}" ${t.id === me.team ? 'selected' : ''}>${esc(t.name)} · ${esc(t.topic)}</option>`).join('')}</select></label>
+        ${net ? '' : `<label class="block"><span class="block text-xs font-bold mb-1.5">소속 팀</span><select id="sTeam" class="field"><option value="">팀 선택</option>${D.teams.map(t => `<option value="${esc(t.id)}" ${t.id === me.team ? 'selected' : ''}>${esc(t.name)} · ${esc(t.topic)}</option>`).join('')}</select></label>`}
       </div>
       <p id="sErr" class="hidden glass-ng rounded-2xl px-3 py-2 text-xs" role="alert"></p>
-      <p class="text-[11px] text-mute leading-relaxed">자기 팀은 평가할 수 없고, 한 팀은 한 번만 평가할 수 있습니다. ${net
-        ? '평가를 제출하면 교수 화면에 바로 집계됩니다.'
-        : '평가를 마치면 "결과 제출 파일 저장"을 눌러 JSON 파일을 교수에게 제출하세요.'}</p>
+      <p class="text-[11px] text-mute leading-relaxed">${net
+        ? '평가할 팀은 교수님이 발표 순서에 맞춰 열어 줍니다. 소속 팀은 팀 명단에서 자동으로 확인되며, 본인 팀은 평가할 수 없습니다. 이름은 팀 명단과 똑같이 입력하세요.'
+        : '자기 팀은 평가할 수 없고, 한 팀은 한 번만 평가할 수 있습니다. 평가를 마치면 "결과 제출 파일 저장"을 눌러 JSON 파일을 교수에게 제출하세요.'}</p>
       <button id="sStart" type="button" class="pill pill-dark w-full px-6 text-sm font-semibold">평가 시작</button></section>`;
     $('sStart').onclick = () => {
-      const v = { name: $('sName').value.trim(), dept: $('sDept').value.trim(), sid: $('sSid').value.trim(), team: $('sTeam').value };
-      const miss = [['sName', v.name, '성명'], ['sDept', v.dept, '학과'], ['sSid', v.sid, '학번'], ['sTeam', v.team, '소속 팀']].find(x => !x[1]);
-      if (miss) { $('sErr').textContent = `${miss[2]}을(를) 입력하세요.`; $('sErr').classList.remove('hidden'); $(miss[0]).setAttribute('aria-invalid', 'true'); $(miss[0]).focus(); return; }
-      const listed = D.teams.find(t => (t.members || []).includes(v.name)); // 팀원 명단과 소속 팀이 다르면 막음
-      if (listed && listed.id !== v.team) { $('sErr').textContent = `팀 명단에는 ${v.name} 님이 ${listed.name} 소속으로 되어 있습니다. 소속 팀을 확인하세요.`; $('sErr').classList.remove('hidden'); $('sTeam').focus(); return; }
+      const v = { name: $('sName').value.trim(), dept: $('sDept').value.trim(), sid: $('sSid').value.trim(), team: net ? '' : $('sTeam').value };
+      const err = (msg, id) => { $('sErr').textContent = msg; $('sErr').classList.remove('hidden'); if (id) { $(id).setAttribute('aria-invalid', 'true'); $(id).focus(); } };
+      const miss = [['sName', v.name, '성명'], ['sDept', v.dept, '학과'], ['sSid', v.sid, '학번'], ...(net ? [] : [['sTeam', v.team, '소속 팀']])].find(x => !x[1]);
+      if (miss) return err(`${miss[2]}을(를) 입력하세요.`, miss[0]);
+      const listed = D.teams.find(t => (t.members || []).some(m => sameName(m, v.name)));
+      if (net) { // 실시간: 학생은 팀을 고르지 않고, 소속 팀은 팀 명단에서 찾음
+        const hasRoster = D.teams.some(t => (t.members || []).length);
+        if (hasRoster && !listed) return err(`팀 명단에서 "${v.name}" 이름을 찾을 수 없습니다. 명단과 똑같이 입력했는지 확인하고, 그래도 없으면 교수님께 알려 주세요.`, 'sName');
+        v.team = listed?.id || '';
+      } else if (listed && listed.id !== v.team) return err(`팀 명단에는 ${v.name} 님이 ${listed.name} 소속으로 되어 있습니다. 소속 팀을 확인하세요.`, 'sTeam');
       if (st.me && st.me.sid !== v.sid) st.done = {}; // 다른 학생이면 진행 기록 초기화
       st.me = v;
       persist();
@@ -1859,7 +1866,7 @@ function studentRuntime(D, K, net) {
 
   let cur = null, scores = {}, stepIdx = 0;
   // 본인 팀: 고른 소속 팀이거나 팀원 명단에 이름이 있는 팀
-  const isOwn = t => t.id === st.me?.team || (t.members || []).includes(st.me?.name);
+  const isOwn = t => t.id === st.me?.team || (t.members || []).some(m => sameName(m, st.me?.name));
   function board() {
     const targets = D.teams.filter(t => !isOwn(t));
     const left = targets.filter(t => !st.done[t.id]);
@@ -2215,7 +2222,8 @@ function acceptLiveEval(m) {
   if (!t) return { ok: false, msg: '등록되지 않은 팀입니다.' };
   if (!ev.name || !ev.sid) return { ok: false, msg: '성명과 학번이 필요합니다.' };
   // 본인 팀 금지: 고른 소속 팀이거나 팀원 명단에 이름이 있으면 거절
-  if (ev.team === t.id || t.members.includes(String(ev.name).trim())) return { ok: false, msg: '본인 팀은 평가할 수 없습니다.' };
+  const nm = x => String(x || '').replace(/\s+/g, '');
+  if (ev.team === t.id || t.members.some(m => nm(m) === nm(ev.name))) return { ok: false, msg: '본인 팀은 평가할 수 없습니다.' };
   // 교수가 "발표 시작"으로 연 팀만 받음
   if (!S.liveFocus) return { ok: false, msg: '지금은 평가 시간이 아닙니다. 교수님이 발표를 시작하면 평가할 수 있어요.' };
   if (t.id !== S.liveFocus) return { ok: false, msg: `지금은 ${teamById(S.liveFocus)?.name || ''} 발표를 평가하는 시간입니다.` };
