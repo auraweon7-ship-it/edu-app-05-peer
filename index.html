@@ -364,18 +364,6 @@
       </div>
     </div>
 
-    <!-- 배포 -->
-    <div class="space-y-3">
-      <div class="sec-head">📤 DEPLOY <small>—— 학생 평가지 · 히스토리</small></div>
-      <div class="glass rounded-3xl p-4 sm:p-5 space-y-3">
-        <p class="text-[12px] leading-relaxed">학생에게 <b>평가지 HTML</b>을 나눠 주면, 파일만 열어 성명·학과·학번·소속 팀을 입력하고 평가한 뒤 <b>결과 제출 파일(JSON)</b>을 저장합니다. 모은 파일은 아래 대시보드의 "학생 평가 파일 불러오기"로 한꺼번에 집계하세요.</p>
-        <div class="flex flex-wrap gap-2">
-          <button id="dlStudent" type="button" class="pill pill-dark px-4 text-xs">평가지 HTML 다운로드 ↓</button>
-          <button id="saveHistory" type="button" class="pill px-4 text-xs">💾 히스토리 저장</button>
-        </div>
-        <p id="deployNote" class="text-[11px] text-mute"></p>
-      </div>
-    </div>
   </section>
 
   <!-- ===== 오른쪽: 평가 (휴대폰에서는 맨 위) ===== -->
@@ -393,14 +381,14 @@
         </div>
         <div id="liveOn" class="hidden space-y-4">
           <div class="flex flex-col min-[480px]:flex-row gap-4 items-center">
-            <button type="button" id="liveQrBtn" class="flex-none bg-white rounded-2xl p-3" style="box-shadow:var(--raise-sm)" aria-label="QR코드 크게 보기"><div id="liveQr" class="w-[168px] h-[168px]"></div></button>
+            <button type="button" id="liveQrBtn" class="flex-none bg-white rounded-2xl p-3" style="box-shadow:var(--raise-sm)" aria-label="QR코드 새 창에서 크게 보기"><div id="liveQr" class="w-[168px] h-[168px]"></div></button>
             <div class="min-w-0 flex-1 space-y-2 w-full">
               <p class="flex items-center gap-2 text-sm font-bold"><span id="liveDot" class="w-2.5 h-2.5 rounded-full flex-none"></span><span id="liveState">연결 준비 중…</span></p>
               <p class="flex flex-wrap gap-2" id="liveStats"></p>
               <p id="liveUrl" class="sunk rounded-xl px-3 py-2 text-[11px] font-disp break-all"></p>
               <div class="flex flex-wrap gap-2">
                 <button id="liveCopy" type="button" class="pill sm px-3 text-[11px]">주소 복사</button>
-                <button id="liveBig" type="button" class="pill sm px-3 text-[11px]">QR 크게 보기</button>
+                <button id="liveBig" type="button" class="pill sm px-3 text-[11px]">QR 크게 보기 (새 창) ↗</button>
                 <button id="liveStop" type="button" class="pill sm px-3 text-[11px]">실시간 평가 종료</button>
               </div>
             </div>
@@ -448,6 +436,19 @@
           <button type="button" data-role="student" aria-pressed="true">🙋 학생 평가</button>
           <button type="button" data-role="prof" aria-pressed="false">🎓 교수 평가</button>
         </div>
+        <!-- 학생 평가: QR로 입장한 학생 명단 -->
+        <div id="rosterBox" class="space-y-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-xs font-bold mr-auto">평가 입장 학생 <span id="rosterCount" class="font-normal text-mute"></span></p>
+            <button id="rosterClear" type="button" class="pill sm px-3 text-[11px]">명단 비우기</button>
+          </div>
+          <div class="scroll-x"><table class="tbl min-w-[34rem]">
+            <thead><tr><th>#</th><th class="l">성명</th><th>학번</th><th>학과</th><th>소속 팀</th><th>접속</th><th>제출</th><th id="rosterFocusHead">지금 팀</th></tr></thead>
+            <tbody id="rosterBody"></tbody>
+          </table></div>
+          <p class="text-[11px] text-mute leading-relaxed">학생은 QR코드로 입장해 휴대폰에서 평가합니다. 입장한 학생이 여기에 표시되고, 제출하면 바로 집계됩니다.</p>
+        </div>
+        <div id="evalForm" class="space-y-5">
         <div id="evaluatorBox" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <label class="block"><span class="block text-xs font-bold mb-1.5">성명</span>
             <input id="evName" type="text" class="field" autocomplete="name" placeholder="홍길동"></label>
@@ -483,15 +484,20 @@
           <button id="submitEval" type="button" class="pill pill-dark px-6 text-sm font-semibold flex-1">평가 제출</button>
           <button id="resetForm" type="button" class="pill px-5 text-sm">점수 초기화</button>
         </div>
+        </div>
       </div>
     </div>
 
     <!-- 히스토리 -->
     <div class="space-y-3">
-      <div class="sec-head">🗂 EVAL HISTORY <small>—— 저장한 평가 세트</small></div>
-      <div class="glass rounded-3xl p-3 sm:p-4">
-        <div class="scroll-x"><table class="tbl min-w-[34rem]">
-          <thead><tr><th>일시</th><th class="l">교과목 · 발표 주제</th><th>팀 수</th><th>열기</th><th>HTML</th><th>수정</th><th>삭제</th></tr></thead>
+      <div class="sec-head">🗂 EVAL HISTORY <small>—— 저장한 평가 세트 · 결과 내려받기</small></div>
+      <div class="glass rounded-3xl p-3 sm:p-4 space-y-3">
+        <div class="flex flex-wrap items-center gap-2 px-1">
+          <button id="saveHistory" type="button" class="pill pill-dark px-4 text-xs">💾 현재 평가 세트 저장</button>
+          <p id="historyNote" class="text-[11px] text-mute min-w-0 flex-1">루브릭·팀·평가 결과를 세트로 보관합니다. 같은 세트는 덮어씁니다.</p>
+        </div>
+        <div class="scroll-x"><table class="tbl min-w-[40rem]">
+          <thead><tr><th>일시</th><th class="l">교과목 · 발표 주제</th><th>팀 수</th><th>평가</th><th>열기</th><th>결과 CSV</th><th>대시보드</th><th>수정</th><th>삭제</th></tr></thead>
           <tbody id="historyBody"></tbody>
         </table></div>
       </div>
@@ -504,13 +510,11 @@
     <div class="flex flex-wrap items-center gap-2">
       <div id="stats" class="flex flex-wrap gap-2 flex-1 min-w-0"></div>
       <div class="flex flex-wrap gap-2">
-        <label class="pill px-4 text-xs" title="학생 평가지에서 저장한 결과 JSON 파일을 여러 개 한꺼번에 선택">학생 평가 파일 불러오기 ↑
-          <input id="importResults" type="file" accept=".json,application/json" multiple class="sr-only"></label>
         <button id="dlCsv" type="button" class="pill pill-dark px-4 text-xs">엑셀(CSV) 다운로드 ↓</button>
+        <button id="dlDash" type="button" class="pill px-4 text-xs">대시보드 HTML ↓</button>
         <button id="clearEvals" type="button" class="pill px-4 text-xs">평가 비우기</button>
       </div>
     </div>
-    <p id="importNote" class="hidden rounded-2xl px-3 py-2 text-xs"></p>
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] items-start">
       <div class="glass rounded-3xl p-3 sm:p-5 min-w-0">
@@ -558,6 +562,8 @@
 
 <script>
 // 화면·저장 파일에 표시되는 앱 버전. 수정할 때마다 올림: 새 기능 → 둘째 자리, 고침·디자인 → 셋째 자리
+// v1.9.0  DEPLOY(학생 평가지 HTML) 삭제, EVAL HISTORY에 세트 저장 버튼·평가 결과 CSV·결과 대시보드 HTML 다운로드
+// v1.8.0  학생 평가 파일 불러오기 삭제, 학생 평가 탭에 QR 입장 학생 명단(접속·제출 현황), QR 크게 보기는 새 창으로
 // v1.7.2  실시간 입장 화면에서 팀 선택 제거: 학생은 평가만, 소속 팀은 팀 명단 이름으로 자동 확인(띄어쓰기 무시)
 // v1.7.1  "지정팀 발표 시작" 버튼, 발표 카운트다운을 교수 LIVE 패널·학생 휴대폰에 함께 표시, 학생 화면에는 지정 팀만 표시
 // v1.7.0  발표 시작/평가 마감: 교수가 연 팀만 학생이 평가(서버 쪽에서도 거절), 발표 시작 시 타이머 자동 시작,
@@ -573,7 +579,7 @@
 // v1.2.0  STEP 3: 루브릭 편집기·AI 루브릭 추천, 팀 일괄 등록·순서 섞기, 자기 팀·중복 평가 차단, 발표 타이머, 극단값 보정·교수 점수 비율
 // v1.1.0  STEP 2: Claude·OpenAI·Gemini 연결 확인·모델 제안, AI 종합 피드백, 키 저장 끄기·삭제, COURSE INFO, 접기·펼치기
 // v1.0.0  STEP 1: 팀 선택·별점+슬라이더 평가·한 줄 피드백·순위표·막대그래프·CSV, 샘플 팀 5개·평가 20건
-const APP_VERSION = 'v1.7.2';
+const APP_VERSION = 'v1.9.0';
 // ?live=방ID 로 열리면 학생 실시간 평가 화면으로 작동
 const LIVE_ID = new URLSearchParams(location.search).get('live');
 
@@ -712,7 +718,7 @@ const S = {
   course: { univ: '', dept: '', prof: '', course: '' },
   collapsed: { ai: false, course: false, rubric: false, teams: false, opt: false },
   formMode: 'all', trim: true, peerPts: 30, timerMin: 5,
-  liveBase: '', liveId: '', liveOn: false, liveFocus: '', liveNext: '',
+  liveBase: '', liveId: '', liveOn: false, liveFocus: '', liveNext: '', roster: [],
   role: 'student', evaluator: { name: '', sid: '', dept: '', team: '' },
   setId: 'sample', setTitle: '', sampleMode: true,
   rubric: defaultRubric(), teams: [], evals: [], ai: {}, history: []
@@ -727,7 +733,7 @@ function loadState() {
     if (!PROVIDERS[S.provider]) S.provider = 'claude';
     for (const k of ['models', 'keys', 'course', 'collapsed', 'evaluator', 'ai'])
       if (s[k] && typeof s[k] === 'object') Object.assign(S[k], s[k]);
-    for (const k of ['rubric', 'teams', 'evals', 'history']) if (Array.isArray(s[k])) S[k] = s[k];
+    for (const k of ['rubric', 'teams', 'evals', 'history', 'roster']) if (Array.isArray(s[k])) S[k] = s[k];
     if (!S.rubric.length) S.rubric = defaultRubric();
     if (!TIMER_OPTIONS.includes(S.timerMin)) S.timerMin = 5;
     S.peerPts = clampPts(S.peerPts);
@@ -1314,6 +1320,10 @@ function renderEvaluator() {
   $('evSid').value = S.evaluator.sid;
   $('evDept').value = S.evaluator.dept;
   $('evTeam').innerHTML = `<option value="">팀 선택</option>` + S.teams.map(t => `<option value="${esc(t.id)}" ${t.id === S.evaluator.team ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+  // 학생 평가는 휴대폰에서만: 이 화면에는 입장 학생 명단, 교수 평가일 때만 채점 폼
+  $('evalForm').classList.toggle('hidden', !prof);
+  $('rosterBox').classList.toggle('hidden', prof);
+  renderRoster();
 }
 document.querySelectorAll('[data-role]').forEach(b => b.onclick = () => { S.role = b.dataset.role; save(); renderEvaluator(); renderTeamSelect(); });
 [['evName', 'name'], ['evSid', 'sid'], ['evDept', 'dept']].forEach(([id, k]) => $(id).addEventListener('input', () => {
@@ -1644,7 +1654,16 @@ ${x.feedback.map(e => `- ${e.feedback}`).join('\n') || '- 없음'}
 
 // ---------- CSV ----------
 function csvCell(v) { const s = String(v ?? ''); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
-$('dlCsv').onclick = () => {
+// 저장한 세트의 루브릭·팀으로 잠시 바꿔 계산 (사용 중인 세트는 현재 값 그대로)
+function withSet(h, fn) {
+  if (!h || h.id === S.setId) return fn();
+  const keep = { rubric: S.rubric, teams: S.teams, setId: S.setId, setTitle: S.setTitle, course: S.course };
+  Object.assign(S, { rubric: h.rubric, teams: h.teams, setId: h.id, setTitle: h.title || '', course: { ...S.course, ...(h.courseInfo || {}) } });
+  try { return fn(); } finally { Object.assign(S, keep); }
+}
+const resultName = () => (S.setTitle || S.course.course || '발표평가').replace(/\s+/g, '_');
+$('dlCsv').onclick = () => downloadCsv();
+function downloadCsv() {
   const rows = aggregate().sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
   const out = [];
   out.push([`${S.course.course || '발표 평가'} ${S.setTitle}`.trim(), `${S.course.univ} ${S.course.dept} ${S.course.prof ? S.course.prof + ' 교수' : ''}`.trim(), `극단값 보정 ${S.trim ? 'ON' : 'OFF'}`, `학생:교수 = ${S.peerPts}:${100 - S.peerPts}`]);
@@ -1661,8 +1680,87 @@ $('dlCsv').onclick = () => {
   out.push(['제출 시각', '구분', '평가자', '학번', '학과', '소속 팀', '평가 팀', ...S.rubric.map(c => c.name), '한 줄 피드백']);
   curEvals().forEach(e => out.push([new Date(e.at).toLocaleString('ko-KR'), e.role === 'prof' ? '교수' : '학생', e.evaluator?.name, e.evaluator?.sid, e.evaluator?.dept, teamById(e.evaluator?.team)?.name || '',
     teamById(e.teamId)?.name, ...S.rubric.map(c => e.scores?.[c.id] ?? ''), e.feedback]));
-  K.download('﻿' + out.map(r => r.map(csvCell).join(',')).join('\r\n'), `발표평가_${S.setTitle || S.course.course || '결과'}_${K.stamp()}.csv`, 'text/csv');
-};
+  K.download('﻿' + out.map(r => r.map(csvCell).join(',')).join('\r\n'), `평가결과_${resultName()}_${K.stamp()}.csv`, 'text/csv');
+}
+// ---------- 평가 결과 대시보드 HTML (같은 디자인, 파일만 열면 보임) ----------
+function buildDashboardHTML() {
+  const rows = aggregate().sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
+  const ev = curEvals(), peer = ev.filter(e => e.role !== 'prof');
+  const people = new Set(peer.map(e => evKey(e.evaluator)).filter(Boolean)).size;
+  const title = S.setTitle || S.course.course || '발표 평가 결과';
+  const courseLine = Object.keys(COURSE_FIELDS).filter(k => S.course[k]).map(k => k === 'prof' ? `${S.course[k]} 교수` : S.course[k]).join(' · ');
+  const chip = (k, v) => `<span class="glass-chip rounded-full px-3 py-1.5 text-xs"><span class="text-mute">${k}</span> <b class="font-disp">${v}</b></span>`;
+  const chartData = {
+    labels: S.rubric.map(c => c.name),
+    datasets: rows.map((x, i) => ({ label: x.team.name, data: x.per.map(p => p.value == null ? null : +p.value.toFixed(2)),
+      backgroundColor: `rgba(47,123,246,${(1 - i / Math.max(rows.length, 1) * 0.78).toFixed(2)})`, borderRadius: 6, maxBarThickness: 26 }))
+  };
+  const rankRows = rows.map(x => `<tr><td>${rankBadge(x.rank)}</td>
+    <td class="l min-w-[8rem]"><b>${esc(x.team.name)}</b><span class="block text-[11px] text-mute">${esc(x.team.topic)}</span></td>
+    ${x.per.map(p => `<td class="font-disp">${fmt(p.peer)}</td>`).join('')}
+    <td class="font-disp">${fmt(x.peerScore, 1)}</td><td class="font-disp">${x.profScore == null ? '<span class="text-[11px] text-mute">미채점</span>' : fmt(x.profScore, 1)}</td>
+    <td class="font-disp font-semibold text-[15px]">${fmt(x.total, 1)}</td><td class="font-disp text-mute">${x.n}</td></tr>`).join('');
+  const teamCards = rows.map(x => {
+    const ai = S.ai[x.team.id];
+    return `<section class="glass rounded-3xl p-4 sm:p-6 space-y-4 min-w-0" style="break-inside:avoid">
+      <div class="flex items-center gap-3">${rankBadge(x.rank)}<div class="min-w-0"><p class="font-bold">${esc(x.team.name)} <span class="text-xs font-normal text-mute">${esc(x.team.topic)}</span></p>
+        <p class="text-[11px] text-mute">팀원 ${esc(x.team.members.join(', ') || '미입력')} · 동료 평가 ${x.n}건${x.profN ? ' · 교수 채점' : ''}</p></div>
+        <p class="ml-auto font-disp text-right"><span class="text-2xl font-semibold">${fmt(x.total, 1)}</span><span class="text-xs text-mute">/100</span></p></div>
+      <div class="scroll-x"><table class="tbl"><thead><tr><th class="l">항목</th><th>가중치</th><th>학생 평균</th><th>교수</th></tr></thead><tbody>
+        ${x.per.map(p => `<tr><td class="l font-semibold">${esc(p.c.name)}</td><td class="font-disp">${p.c.weight}%</td><td class="font-disp">${fmt(p.peer)}</td><td class="font-disp">${fmt(p.prof)}</td></tr>`).join('')}
+        <tr><td class="l font-bold">환산 점수</td><td></td><td class="font-disp font-semibold">${fmt(x.peerScore, 1)} / ${S.peerPts}</td><td class="font-disp font-semibold">${x.profScore == null ? '미채점' : fmt(x.profScore, 1)} / ${100 - S.peerPts}</td></tr></tbody></table></div>
+      <div class="glass-chip rounded-2xl p-4"><p class="text-xs font-bold mb-2">🤖 종합 피드백 <span class="font-normal text-mute">${ai && !ai.auto ? esc(ai.by || 'AI') : '점수 기반 자동 요약'}</span></p>
+        <div class="ai-out">${aiHTML(ai ? ai.text : autoFeedback(x))}</div></div>
+      <ul class="space-y-2">${x.feedback.map(e => `<li class="sunk rounded-2xl px-3 py-2 text-[13px] leading-relaxed">${esc(e.feedback)}<span class="block text-[10px] text-mute mt-0.5">${e.role === 'prof' ? '🎓 교수' : esc(e.evaluator?.name || '익명')}</span></li>`).join('') || '<li class="text-xs text-mute">한 줄 피드백이 없습니다.</li>'}</ul>
+    </section>`;
+  }).join('');
+  const devRows = deviations(ev).map(d => `<tr><td class="l font-semibold">${esc(d.ev?.name || '–')}</td><td class="font-disp">${esc(d.ev?.sid || '')}</td><td>${esc(teamById(d.ev?.team)?.name || '')}</td>
+    <td class="font-disp">${d.teams}</td><td class="font-disp">${fmt(d.avg)}</td><td class="font-disp">${d.bias == null ? '–' : (d.bias > 0 ? '+' : '') + d.bias.toFixed(2)}</td><td class="font-disp">${fmt(d.mad)}</td></tr>`).join('');
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)} · 평가 결과 대시보드</title>
+<script src="https://cdn.tailwindcss.com/3.4.16"><\/script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\/script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script>${$('twConfig').textContent}<\/script>
+<style>${$('baseCss').textContent}
+  @media print { .scroll-x { overflow: visible; } canvas { max-width: 100%; } }</style></head>
+<body class="font-sans min-h-screen overflow-x-hidden">
+<header class="glass !border-x-0 !border-t-0 !rounded-none"><div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+  <div><p class="flex items-baseline gap-2"><span class="font-disp text-xl font-medium tracking-[0.24em]">PEERSCORE</span><span class="glass-chip rounded-full px-2 py-0.5 font-disp text-[10px] font-semibold text-mute">${APP_VERSION}</span></p>
+  <p class="text-[10px] text-mute">교수신문 AI 교육 웹앱 시리즈 · 05 학생 발표 평가 웹앱</p></div>
+  <span class="glass-chip rounded-full px-3 py-1 text-[11px] font-semibold">평가 결과 대시보드</span></div></header>
+<main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+  <section class="glass rounded-3xl p-5 sm:p-6"><div class="sec-head">📊 RESULT DASHBOARD <small>—— ${esc(new Date().toLocaleString('ko-KR'))} 기준</small></div>
+    <h1 class="mt-4 text-2xl sm:text-3xl font-black tracking-tight">${esc(title)}</h1>
+    <p class="mt-1 text-xs text-mute">${esc(courseLine || '강의 정보 미입력')}</p>
+    <div class="mt-4 flex flex-wrap gap-2">${chip('팀', S.teams.length)}${chip('평가 참여', `${people}명`)}${chip('동료 평가', `${peer.length}건`)}${chip('교수 채점', `${ev.filter(e => e.role === 'prof').length}팀`)}${chip('점수 비율', `학생 ${S.peerPts} : 교수 ${100 - S.peerPts}`)}${S.trim ? chip('극단값 보정', 'ON') : ''}</div></section>
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] items-start">
+    <section class="glass rounded-3xl p-3 sm:p-5 min-w-0"><p class="text-xs font-bold mb-2 px-1">🏆 팀별 순위표 <span class="font-normal text-mute">· 합계 100점 = 학생 ${S.peerPts} + 교수 ${100 - S.peerPts}</span></p>
+      <div class="scroll-x"><table class="tbl"><thead><tr><th>순위</th><th class="l">팀</th>${S.rubric.map(c => `<th>${esc(c.name)}<br><span class="font-normal">${c.weight}%</span></th>`).join('')}
+        <th>학생<br><span class="font-normal">/${S.peerPts}</span></th><th>교수<br><span class="font-normal">/${100 - S.peerPts}</span></th><th>합계<br><span class="font-normal">/100</span></th><th>평가</th></tr></thead>
+        <tbody>${rankRows || `<tr><td colspan="${S.rubric.length + 6}" class="text-mute">팀이 없습니다.</td></tr>`}</tbody></table></div></section>
+    <section class="glass rounded-3xl p-3 sm:p-5 min-w-0"><p class="text-xs font-bold mb-2 px-1">📶 항목별 학생 평균 <span class="font-normal text-mute">(5점 만점)</span></p>
+      <div class="relative h-[18rem]"><canvas id="barChart" role="img" aria-label="팀별 항목 평균 막대그래프"></canvas></div></section>
+  </div>
+  <div class="grid gap-6 md:grid-cols-2 items-start">${teamCards}</div>
+  <section class="glass rounded-3xl p-3 sm:p-5 min-w-0"><p class="text-xs font-bold mb-2 px-1">🧮 평가자별 점수 편차 <span class="font-normal text-mute">(평가자 점수 − 해당 팀 항목 평균)</span></p>
+    <div class="scroll-x"><table class="tbl min-w-[32rem]"><thead><tr><th class="l">평가자</th><th>학번</th><th>소속 팀</th><th>평가 팀 수</th><th>평균 점수</th><th>편차(±)</th><th>평균 절대편차</th></tr></thead>
+      <tbody>${devRows || '<tr><td colspan="7" class="text-mute">동료 평가가 없습니다.</td></tr>'}</tbody></table></div></section>
+</main>
+<footer class="mt-6 glass !border-x-0 !border-b-0 !rounded-none"><div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row sm:justify-between gap-2 text-xs text-[#5e5e64]">
+  <p class="font-disp tracking-wide">Copyright 2026 ⓒ Edu AI APP, All Rights Reserved.</p><p class="font-medium">박정원 교수 <span class="text-mute">(한국외국어대학교 중국학대학)</span></p></div></footer>
+<script>
+  if (window.Chart) new Chart(document.getElementById('barChart'), { type: 'bar', data: ${JSON.stringify(chartData).replace(/</g, '\\u003c')},
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 5, ticks: { stepSize: 1 } }, x: { grid: { display: false } } },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10 } } } } });
+<\/script>
+</body></html>`;
+}
+function downloadDashboard() {
+  K.download(buildDashboardHTML(), `평가결과대시보드_${resultName()}_${K.stamp()}.html`);
+}
+$('dlDash').onclick = () => downloadDashboard();
 $('clearEvals').onclick = () => {
   const n = curEvals().length;
   if (!n) return toast('비울 평가가 없습니다.');
@@ -1672,39 +1770,6 @@ $('clearEvals').onclick = () => {
   save();
   renderTeamSelect();
   renderDashboard();
-};
-
-// ---------- 학생 평가 파일(JSON) 여러 개 불러와 집계 ----------
-$('importResults').onchange = async e => {
-  const files = [...e.target.files];
-  e.target.value = '';
-  if (!files.length) return;
-  let added = 0, dup = 0, bad = [], other = 0, students = 0;
-  for (const f of files) {
-    let d;
-    try { d = JSON.parse(await f.text()); } catch { bad.push(f.name); continue; }
-    if (d?.app !== 'peerscore' || d.kind !== 'result' || !Array.isArray(d.evals)) { bad.push(f.name); continue; }
-    students++;
-    const setId = d.setId || S.setId;
-    const teams = setId === S.setId ? S.teams : (S.history.find(h => h.id === setId)?.teams || []);
-    if (setId !== S.setId) other++;
-    const k = evKey(d.evaluator || {});
-    for (const x of d.evals) {
-      const team = teams.find(t => t.id === x.teamId) || teams.find(t => t.name === x.teamName);
-      const teamId = team?.id || x.teamId;
-      if (!teamId || teamId === d.evaluator?.team) continue;
-      if (S.evals.some(o => o.setId === setId && o.teamId === teamId && o.role !== 'prof' && evKey(o.evaluator) === k)) { dup++; continue; }
-      S.evals.push({ id: uid('e'), setId, teamId, role: 'student', source: 'file', evaluator: { name: d.evaluator?.name || '', sid: d.evaluator?.sid || '', dept: d.evaluator?.dept || '', team: d.evaluator?.team || '' },
-        scores: x.scores || {}, feedback: String(x.feedback || '').slice(0, 200), at: x.at || d.savedAt || Date.now() });
-      delete S.ai[teamId];
-      added++;
-    }
-  }
-  save();
-  renderTeamSelect();
-  renderDashboard();
-  setNote($('importNote'), bad.length && !added ? 'ng' : 'ok',
-    `${added ? '✔' : '⚠'} 학생 ${students}명의 파일에서 평가 ${added}건을 집계에 넣었습니다.${dup ? ` 중복 ${dup}건은 건너뜀.` : ''}${other ? ` (다른 평가 세트 파일 ${other}개 — EVAL HISTORY에서 해당 세트를 열면 보입니다)` : ''}${bad.length ? ` 읽지 못한 파일: ${bad.join(', ')}` : ''}`);
 };
 
 // ---------- 히스토리 ----------
@@ -1718,7 +1783,7 @@ $('saveHistory').onclick = () => {
   if (i >= 0) S.history[i] = data; else S.history.unshift(data);
   save();
   renderAll();
-  setNote($('deployNote'), 'ok', `✔ "${data.title || data.course || '평가 세트'}"를 히스토리에 ${i >= 0 ? '덮어써' : ''} 저장했습니다.`);
+  setNote($('historyNote'), 'ok', `✔ "${data.title || data.course || '평가 세트'}"를 히스토리에 ${i >= 0 ? '덮어써' : ''} 저장했습니다.`);
 };
 let editingHistory = null;
 function renderHistory() {
@@ -1730,14 +1795,17 @@ function renderHistory() {
         ? `<input type="text" data-hrename="${esc(h.id)}" value="${esc(h.title)}" class="field !py-1.5 text-[13px]" aria-label="평가 세트 이름">`
         : `<b class="text-[13px]">${esc(h.course || '과목 미입력')}</b> <span class="text-[12px] text-mute">${esc(h.title || '')}</span>${cur ? ' <span class="glass-chip rounded-full px-2 py-0.5 text-[10px] font-semibold text-[rgb(47,123,246)]">사용 중</span>' : ''}`}</td>
       <td class="font-disp">${h.teams.length}</td>
+      <td class="font-disp">${S.evals.filter(e => e.setId === h.id).length}</td>
       <td><button type="button" class="pill sm px-3 text-[11px]" data-hopen="${esc(h.id)}">열기</button></td>
-      <td><button type="button" class="pill sm px-3 text-[11px]" data-hhtml="${esc(h.id)}">↓</button></td>
+      <td><button type="button" class="pill sm px-3 text-[11px]" data-hcsv="${esc(h.id)}" aria-label="평가 결과 CSV 다운로드">CSV ↓</button></td>
+      <td><button type="button" class="pill sm px-3 text-[11px]" data-hdash="${esc(h.id)}" aria-label="결과 대시보드 HTML 다운로드">HTML ↓</button></td>
       <td><button type="button" class="pill sm px-3 text-[11px]" data-hedit="${esc(h.id)}">${editingHistory === h.id ? '저장' : '수정'}</button></td>
       <td><button type="button" class="pill sm px-3 text-[11px] hover:!text-[#d0544a]" data-hdel="${esc(h.id)}" aria-label="삭제">✕</button></td></tr>`;
-  }).join('') || '<tr><td colspan="7" class="text-mute text-xs py-4">저장한 평가 세트가 없습니다. 루브릭과 팀을 정한 뒤 "히스토리 저장"을 누르세요.</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="text-mute text-xs py-4">저장한 평가 세트가 없습니다. 루브릭과 팀을 정한 뒤 "현재 평가 세트 저장"을 누르세요.</td></tr>';
   const find = id => S.history.find(h => h.id === id);
   $('historyBody').querySelectorAll('[data-hopen]').forEach(b => b.onclick = () => openSet(find(b.dataset.hopen)));
-  $('historyBody').querySelectorAll('[data-hhtml]').forEach(b => b.onclick = () => downloadStudent(find(b.dataset.hhtml)));
+  $('historyBody').querySelectorAll('[data-hcsv]').forEach(b => b.onclick = () => withSet(find(b.dataset.hcsv), downloadCsv));
+  $('historyBody').querySelectorAll('[data-hdash]').forEach(b => b.onclick = () => withSet(find(b.dataset.hdash), downloadDashboard));
   $('historyBody').querySelectorAll('[data-hedit]').forEach(b => b.onclick = () => {
     const h = find(b.dataset.hedit);
     if (editingHistory === h.id) {
@@ -1775,40 +1843,6 @@ function openSet(h) {
   save();
   renderAll();
   toast('평가 세트를 열었습니다. 루브릭·팀을 고친 뒤 "히스토리 저장"을 누르면 덮어씁니다.');
-}
-
-// ---------- 학생 평가지 HTML ----------
-$('dlStudent').onclick = () => {
-  if (S.sampleMode && !confirm('지금은 샘플 팀입니다. 샘플 팀으로 평가지를 만들까요? (실제 수업에는 팀을 먼저 등록하세요)')) return;
-  downloadStudent(currentSetData());
-};
-function downloadStudent(set) {
-  K.download(buildStudentHTML(set), `평가지_${set.title || set.course || '발표평가'}.html`);
-  setNote($('deployNote'), 'ok', '✔ 평가지 HTML을 내려받았습니다. 학생에게 나눠 주고, 학생이 저장한 결과 JSON을 모아 대시보드에서 불러오세요.');
-}
-function buildStudentHTML(set) {
-  const data = { app: 'peerscore', setId: set.id, title: set.title, course: set.courseInfo || S.course, rubric: set.rubric, teams: set.teams, version: APP_VERSION };
-  const json = JSON.stringify(data).replace(/</g, '\\u003c');
-  const css = $('baseCss').textContent;
-  const tw = $('twConfig').textContent;
-  return `<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(set.title || '발표 평가지')} · PEERSCORE 평가지</title>
-<script src="https://cdn.tailwindcss.com/3.4.16"><\/script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
-<script>${tw}<\/script>
-<style>${css}</style></head>
-<body class="font-sans min-h-screen overflow-x-hidden">
-<header class="glass !border-x-0 !border-t-0 !rounded-none"><div class="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-  <div><p class="flex items-baseline gap-2"><span class="font-disp text-xl font-medium tracking-[0.24em]">PEERSCORE</span><span class="glass-chip rounded-full px-2 py-0.5 font-disp text-[10px] font-semibold text-mute">${APP_VERSION}</span></p>
-  <p class="text-[10px] text-mute">교수신문 AI 교육 웹앱 시리즈 · 05 학생 발표 평가 웹앱</p></div>
-  <span class="glass-chip rounded-full px-3 py-1 text-[11px] font-semibold">학생 평가지</span></div></header>
-<main id="app" class="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6"></main>
-<footer class="mt-6 glass !border-x-0 !border-b-0 !rounded-none"><div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row sm:justify-between gap-2 text-xs text-[#5e5e64]">
-  <p class="font-disp tracking-wide">Copyright 2026 ⓒ Edu AI APP, All Rights Reserved.</p><p class="font-medium">박정원 교수 <span class="text-mute">(한국외국어대학교 중국학대학)</span></p></div></footer>
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script>(${studentRuntime.toString()})(${json}, (${kit.toString()})());<\/script>
-</body></html>`;
 }
 
 // 평가지 HTML·실시간 평가 화면에서 그대로 실행되는 코드: 바깥 변수를 참조하지 않아야 함
@@ -2139,6 +2173,7 @@ function setLiveFocus(id) {
   save();
   liveBroadcast({ type: 'focus', teamId: id });
   renderLive();
+  renderRoster();
 }
 $('liveGo').onclick = () => {
   const t = teamById($('liveFocus').value);
@@ -2174,7 +2209,7 @@ function openPeer(retry = 0) {
   peer.on('connection', conn => {
     conn.on('open', () => { live.conns.add(conn); conn.send({ type: 'hello', set: liveSet() }); renderLiveStats(); });
     conn.on('data', m => onLiveData(conn, m));
-    const drop = () => { live.conns.delete(conn); renderLiveStats(); };
+    const drop = () => { live.conns.delete(conn); renderLiveStats(); renderRoster(); };
     conn.on('close', drop);
     conn.on('error', drop);
   });
@@ -2201,6 +2236,39 @@ function stopLive() {
   live.conns.clear();
   renderLive();
 }
+// 입장 학생 명단: 평가 세트별로 학번 기준 기록
+function rosterAdd(ev) {
+  if (!ev?.sid) return;
+  const r = S.roster.find(x => x.setId === S.setId && x.sid === ev.sid);
+  const v = { setId: S.setId, name: String(ev.name || '').slice(0, 30), sid: String(ev.sid).slice(0, 20), dept: String(ev.dept || '').slice(0, 30), team: teamById(ev.team) ? ev.team : '' };
+  if (r) Object.assign(r, v); else S.roster.push({ ...v, at: Date.now() });
+  save();
+  renderRoster();
+}
+function renderRoster() {
+  const list = S.roster.filter(r => r.setId === S.setId).sort((a, b) => a.at - b.at);
+  const online = new Set([...live.conns].map(c => c.evaluator?.sid).filter(Boolean));
+  const focus = teamById(S.liveFocus);
+  const evs = curEvals().filter(e => e.role !== 'prof');
+  $('rosterCount').textContent = `${list.length}명 · 접속 중 ${list.filter(r => online.has(r.sid)).length}명`;
+  $('rosterFocusHead').textContent = focus ? `${focus.name} 평가` : '지금 팀';
+  $('rosterBody').innerHTML = list.map((r, i) => {
+    const mine = evs.filter(e => evKey(e.evaluator) === r.sid);
+    const own = focus && (r.team === focus.id);
+    const did = focus && mine.some(e => e.teamId === focus.id);
+    return `<tr><td class="font-disp text-mute">${i + 1}</td><td class="l font-semibold">${esc(r.name)}</td><td class="font-disp">${esc(r.sid)}</td><td>${esc(r.dept)}</td>
+      <td>${esc(teamById(r.team)?.name || '–')}</td>
+      <td>${online.has(r.sid) ? '<span class="inline-flex items-center gap-1 text-[11px] font-semibold" style="color:rgb(63,156,90)"><i class="w-2 h-2 rounded-full" style="background:currentColor"></i>접속</span>' : '<span class="text-[11px] text-mute">나감</span>'}</td>
+      <td class="font-disp">${mine.length}</td>
+      <td>${!focus ? '<span class="text-mute">–</span>' : own ? '<span class="text-[11px] text-mute">본인 팀</span>' : did ? '<b style="color:rgb(47,123,246)">✔</b>' : '<span class="text-[11px] text-mute">대기</span>'}</td></tr>`;
+  }).join('') || '<tr><td colspan="8" class="text-mute text-xs py-4">아직 입장한 학생이 없습니다. LIVE에서 실시간 평가를 시작하고 QR코드를 보여 주세요.</td></tr>';
+}
+$('rosterClear').onclick = () => {
+  if (!confirm('입장 학생 명단을 비울까요? (제출된 평가는 지워지지 않습니다)')) return;
+  S.roster = S.roster.filter(r => r.setId !== S.setId);
+  save();
+  renderRoster();
+};
 function doneTeams(ev) {
   const k = evKey(ev || {});
   return k ? curEvals().filter(e => e.role !== 'prof' && evKey(e.evaluator) === k).map(e => e.teamId) : [];
@@ -2210,6 +2278,7 @@ function onLiveData(conn, m) {
   if (m.type === 'join') {
     conn.evaluator = m.evaluator;
     conn.send({ type: 'state', done: doneTeams(m.evaluator) });
+    rosterAdd(m.evaluator);
     renderLiveStats();
   } else if (m.type === 'eval') {
     conn.evaluator = m.evaluator || conn.evaluator;
@@ -2238,6 +2307,7 @@ function acceptLiveEval(m) {
   renderDashboard();
   renderLiveStats();
   renderLiveNow();
+  renderRoster();
   toast(`📡 ${ev.name} → ${t.name} 평가 도착`);
   return { ok: true };
 }
@@ -2255,8 +2325,37 @@ function openQrModal() {
   $('qrModal').classList.remove('hidden');
   $('qrClose').focus();
 }
-$('liveBig').onclick = openQrModal;
-$('liveQrBtn').onclick = openQrModal;
+// 새 창에 큰 QR (빔프로젝터·두 번째 모니터용). 팝업이 막히면 이 창 위에 크게 띄움
+function openQrWindow() {
+  const url = liveUrl();
+  const box = document.createElement('div');
+  if (window.QRCode) new QRCode(box, { text: url, width: 720, height: 720, correctLevel: QRCode.CorrectLevel.M });
+  const img = box.querySelector('canvas')?.toDataURL('image/png') || '';
+  const w = window.open('', 'peerscore-qr', 'width=900,height=1000');
+  if (!w) { toast('팝업이 막혀 이 창에 크게 띄웁니다. 주소창의 팝업 허용을 켜면 새 창으로 열립니다.'); return openQrModal(); }
+  const title = esc(S.setTitle || S.course.course || '발표 동료 평가');
+  w.document.open();
+  w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>입장 QR · PEERSCORE</title>
+<style>
+  :root{--bg:#ececeb;--face:#f1f1f0;--ink:#1d1d1f;--mute:#77777d}
+  *{box-sizing:border-box}html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,'Noto Sans KR','Malgun Gothic',sans-serif;display:grid;place-items:center;padding:24px;text-align:center}
+  .brand{font-size:15px;letter-spacing:.24em;margin:0;color:var(--mute)}
+  h1{font-size:clamp(22px,4vw,40px);margin:8px 0 18px;font-weight:800}
+  .card{display:inline-block;background:#fff;border-radius:28px;padding:clamp(14px,2.5vw,28px);box-shadow:0 14px 28px -10px rgba(0,0,0,.25),inset 0 1px 0 #fff}
+  img{display:block;width:min(78vmin,720px);height:auto;image-rendering:pixelated}
+  .url{font-size:13px;color:var(--mute);margin:18px auto 0;max-width:90vw;word-break:break-all}
+  .hint{font-size:clamp(14px,2vw,20px);font-weight:700;margin:14px 0 0}
+</style></head><body><main>
+<p class="brand">PEERSCORE LIVE</p><h1>${title}</h1>
+<div class="card">${img ? `<img src="${img}" alt="학생 입장 QR코드">` : '<p>QR코드를 만들지 못했습니다.</p>'}</div>
+<p class="hint">휴대폰 카메라로 QR코드를 찍어 입장하세요</p>
+<p class="url">${esc(url)}</p></main></body></html>`);
+  w.document.close();
+  w.focus();
+}
+$('liveBig').onclick = openQrWindow;
+$('liveQrBtn').onclick = openQrWindow;
 $('qrClose').onclick = () => $('qrModal').classList.add('hidden');
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('qrModal').classList.add('hidden'); });
 
