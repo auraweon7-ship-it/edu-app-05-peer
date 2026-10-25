@@ -333,9 +333,10 @@
           <div class="flex flex-wrap items-center gap-2">
             <p class="text-xs font-bold mr-auto">📎 팀별 발표자료 <span class="font-normal text-mute">(PPTX · PDF · PPT)</span></p>
             <span id="slideCount" class="text-[11px] text-mute"></span>
+            <button id="slideAll" type="button" class="pill sm pill-dark px-3 text-[11px]">🤖 전체 팀 점수 제안</button>
           </div>
           <ul id="slideList" class="space-y-2"></ul>
-          <p class="text-[11px] text-mute leading-relaxed">발표자료는 이 컴퓨터의 브라우저에만 보관되고 학생 휴대폰에는 보내지 않습니다. <b class="text-ink">AI 분석</b>은 PPTX의 글과 PDF를 읽어 루브릭의 "발표자료" 항목 점수(1~5점)와 피드백 초안을 만들고, 교수 채점에 반영할 수 있습니다.</p>
+          <p class="text-[11px] text-mute leading-relaxed">발표자료는 이 컴퓨터의 브라우저에만 보관되고 학생 휴대폰에는 보내지 않습니다. 파일을 올리면 AI가 PPTX의 글·PDF를 읽어 루브릭 "발표자료" 항목의 <b class="text-ink">점수(1~5점)를 근거와 함께 제안</b>합니다. 별을 눌러 점수를 고친 뒤 <b class="text-ink">교수 점수에 반영</b>하세요.</p>
         </div>
         <label class="block"><span class="block text-xs font-bold mb-1.5">팀 목록 <span class="font-normal text-mute">(한 줄에 한 팀, 쉼표로 구분: 팀명, 발표 주제, 팀원1, 팀원2 …)</span></span>
           <textarea id="teamText" rows="6" class="field rounded-2xl leading-relaxed resize-y" placeholder="1팀, 한류 콘텐츠의 중국 진출, 김민준, 이서연&#10;2팀, 중국 MZ세대 소비, 최유진, 정하늘"></textarea></label>
@@ -572,6 +573,7 @@
 
 <script>
 // 화면·저장 파일에 표시되는 앱 버전. 수정할 때마다 올림: 새 기능 → 둘째 자리, 고침·디자인 → 셋째 자리
+// v2.1.0  팀별 발표자료 목록에서 발표자료 점수 제안: 올리면 바로 분석, 별로 점수 조정·근거·교수 점수 반영, 전체 팀 점수 제안
 // v2.0.0  팀별 발표자료(PPTX·PDF·PPT) 업로드(브라우저 IndexedDB 보관), 루브릭 "발표자료" 항목(20%) 추가,
 //         발표자료 AI 분석(PPTX 글 추출·PDF 첨부 → 1~5점·피드백) → 교수 채점 자동 채움·반영, 결과지·대시보드·CSV에 표시
 // v1.9.0  DEPLOY(학생 평가지 HTML) 삭제, EVAL HISTORY에 세트 저장 버튼·평가 결과 CSV·결과 대시보드 HTML 다운로드
@@ -591,7 +593,7 @@
 // v1.2.0  STEP 3: 루브릭 편집기·AI 루브릭 추천, 팀 일괄 등록·순서 섞기, 자기 팀·중복 평가 차단, 발표 타이머, 극단값 보정·교수 점수 비율
 // v1.1.0  STEP 2: Claude·OpenAI·Gemini 연결 확인·모델 제안, AI 종합 피드백, 키 저장 끄기·삭제, COURSE INFO, 접기·펼치기
 // v1.0.0  STEP 1: 팀 선택·별점+슬라이더 평가·한 줄 피드백·순위표·막대그래프·CSV, 샘플 팀 5개·평가 20건
-const APP_VERSION = 'v2.0.0';
+const APP_VERSION = 'v2.1.0';
 // ?live=방ID 로 열리면 학생 실시간 평가 화면으로 작동
 const LIVE_ID = new URLSearchParams(location.search).get('live');
 
@@ -1234,18 +1236,56 @@ function renderSlides() {
         <span class="flex flex-wrap gap-1.5">
           <label class="pill sm px-3 text-[11px]">${m ? '교체' : '📎 올리기'}<input type="file" data-up="${esc(t.id)}" accept=".pptx,.ppt,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint" class="sr-only"></label>
           ${m ? `<button type="button" class="pill sm px-3 text-[11px]" data-sopen="${esc(t.id)}">열기</button>
-          <button type="button" class="pill sm pill-dark px-3 text-[11px]" data-sai="${esc(t.id)}">🤖 ${ai ? '다시 분석' : 'AI 분석'}</button>
+          <button type="button" class="pill sm pill-dark px-3 text-[11px]" data-sai="${esc(t.id)}" ${busySlides.has(t.id) ? 'disabled' : ''}>🤖 ${ai ? '다시 제안' : '점수 제안'}</button>
           <button type="button" class="pill sm px-3 text-[11px] hover:!text-[#d0544a]" data-sdel="${esc(t.id)}" aria-label="${esc(t.name)} 발표자료 삭제">✕</button>` : ''}
         </span>
       </div>
-      ${ai ? `<p class="sunk rounded-xl px-3 py-2 text-[12px] leading-relaxed"><b style="color:rgb(47,123,246)">발표자료 ${ai.score}/5</b> · ${esc(ai.summary || '')}</p>` : ''}
+      ${ai ? slideSuggestHTML(t.id, ai) : m ? `<p class="text-[11px] text-mute px-1">${busySlides.has(t.id) ? '<span class="spinner inline-block align-[-3px] mr-1"></span>점수 제안을 만드는 중…' : '"🤖 점수 제안"을 누르면 발표자료 점수를 제안합니다.'}</p>` : ''}
     </li>`;
   }).join('') || '<li class="text-[11px] text-mute">팀을 먼저 등록하세요.</li>';
   $('slideList').querySelectorAll('[data-up]').forEach(inp => inp.onchange = () => { const f = inp.files[0]; inp.value = ''; if (f) uploadSlide(inp.dataset.up, f); });
   $('slideList').querySelectorAll('[data-sopen]').forEach(b => b.onclick = () => openSlide(b.dataset.sopen));
   $('slideList').querySelectorAll('[data-sai]').forEach(b => b.onclick = () => analyzeSlide(b.dataset.sai, b));
   $('slideList').querySelectorAll('[data-sdel]').forEach(b => b.onclick = () => deleteSlide(b.dataset.sdel));
+  $('slideList').querySelectorAll('[data-spick]').forEach(b => b.onclick = () => {
+    const [id, v] = b.dataset.spick.split('|'), a = S.slideAI[slideKey(id)];
+    a.pick = +v;
+    save();
+    renderSlides();
+    $('slideList').querySelector(`[data-spick="${CSS.escape(b.dataset.spick)}"]`)?.focus();
+  });
+  $('slideList').querySelectorAll('[data-sapply]').forEach(b => b.onclick = () => applySlideScore(b.dataset.sapply));
+  $('slideAll').disabled = !S.teams.some(t => S.slides[slideKey(t.id)]) || busySlides.size > 0;
 }
+const slidePick = ai => ai?.pick ?? ai?.score;
+// 제안 점수: 별 5개(교수가 고칠 수 있음) + 근거 + 반영 버튼
+function slideSuggestHTML(teamId, ai) {
+  const v = slidePick(ai), c = slideCrit();
+  const applied = curEvals().find(e => e.teamId === teamId && e.role === 'prof')?.scores?.[c?.id];
+  return `<div class="sunk rounded-2xl px-3 py-3 space-y-2">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <p class="text-[12px] font-bold">제안 점수 <b class="font-disp text-xl align-[-2px]" style="color:rgb(47,123,246)">${v}</b><span class="text-mute">/5</span>
+        ${ai.pick != null && ai.pick !== ai.score ? `<span class="text-[10px] text-mute font-normal">(AI ${ai.score}점 → 교수 조정)</span>` : ''}</p>
+      <div class="stars" role="radiogroup" aria-label="${esc(teamById(teamId)?.name || '')} 발표자료 제안 점수">${[1, 2, 3, 4, 5].map(n =>
+        `<button type="button" class="star ${n <= v ? 'on' : ''}" role="radio" aria-checked="${n === v}" aria-label="${n}점" data-spick="${esc(teamId)}|${n}">★</button>`).join('')}</div>
+    </div>
+    <p class="text-[12px] leading-relaxed"><b>근거</b> ${esc(ai.summary || '')}${c ? ` <span class="text-mute">· ${v}점 기준: ${esc(c.desc?.[v - 1] || '')}</span>` : ''}</p>
+    <details><summary class="link-btn cursor-pointer text-[11px] font-semibold text-mute select-none">잘한 점 · 개선점 · 제안 보기</summary><div class="ai-out mt-1">${aiHTML(ai.text)}</div></details>
+    <div class="flex flex-wrap items-center gap-2">
+      ${c ? `<button type="button" class="pill sm px-3 text-[11px]" data-sapply="${esc(teamId)}">교수 점수에 반영 (${v}점)</button>` : ''}
+      <span class="text-[10px] text-mute">${applied != null ? `현재 교수 채점: ${applied}점` : '교수 채점 전 · 교수 평가 탭에서 이 점수가 미리 채워집니다'} · ${ai.auto ? '글자 분량 기준 자동 점검' : esc(ai.by || 'AI')}</span>
+    </div>
+  </div>`;
+}
+const busySlides = new Set();
+// 발표자료가 있고 아직 제안이 없는 팀을 차례로 분석
+$('slideAll').onclick = async () => {
+  const list = S.teams.filter(t => S.slides[slideKey(t.id)]);
+  if (S.teams.some(t => S.slideAI[slideKey(t.id)]) && !confirm('이미 제안된 팀도 다시 분석할까요? (취소하면 제안이 없는 팀만 분석합니다)')) {
+    for (const t of list.filter(t => !S.slideAI[slideKey(t.id)])) await analyzeSlide(t.id);
+  } else for (const t of list) await analyzeSlide(t.id);
+  toast('발표자료 점수 제안을 마쳤습니다.');
+};
 async function uploadSlide(teamId, file) {
   const t = teamById(teamId), ext = (file.name.split('.').pop() || '').toLowerCase();
   if (!['pptx', 'ppt', 'pdf'].includes(ext)) return toast('PPTX·PPT·PDF 파일만 올릴 수 있습니다.');
@@ -1262,6 +1302,7 @@ async function uploadSlide(teamId, file) {
   save();
   renderSlides();
   toast(`📎 ${t?.name} 발표자료를 올렸습니다.${ext === 'ppt' ? ' (PPT는 AI 분석을 위해 PPTX·PDF로 저장해 올리는 것을 권장합니다)' : ''}`);
+  if (ext !== 'ppt') analyzeSlide(teamId); // 올리면 바로 점수 제안
 }
 async function openSlide(teamId) {
   const rec = await fileDB.get(slideKey(teamId)).catch(() => null);
@@ -1303,6 +1344,8 @@ async function analyzeSlide(teamId, btn) {
   if (rec.ext === 'pdf' && rec.blob.size > 20 * 1048576) return toast('AI 분석은 20MB 이하 PDF만 가능합니다.');
   const label = btn?.textContent;
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>분석 중'; }
+  busySlides.add(teamId);
+  renderSlides();
   try {
     const pdf = rec.ext === 'pdf' ? { name: rec.name, base64: await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(rec.blob); }) } : null;
     const desc = (c?.desc || SLIDE_CRIT().desc).map((d, i) => `${i + 1}점: ${d}`).join('\n');
@@ -1324,10 +1367,13 @@ ${pdf ? '첨부한 PDF 발표자료' : `아래 슬라이드 글(PPTX에서 추�
     renderSlides();
     renderDashboard();
     renderTeamInfo();
-    toast(`🤖 ${t.name} 발표자료 분석 완료 · ${score}/5`);
+    toast(`🤖 ${t.name} 발표자료 점수 제안 · ${score}/5`);
   } catch (err) {
     toast(`AI 분석 실패 — ${err.message}`);
     if (btn) { btn.disabled = false; btn.textContent = label; }
+  } finally {
+    busySlides.delete(teamId);
+    renderSlides();
   }
 }
 // 교수 채점의 발표자료 점수를 AI 추천 점수로 바꿈
@@ -1336,10 +1382,11 @@ function applySlideScore(teamId) {
   if (!c || !ai) return;
   const e = curEvals().find(x => x.teamId === teamId && x.role === 'prof');
   if (!e) return toast('아직 교수 채점이 없습니다. 교수 평가 탭에서 이 팀을 고르면 발표자료 점수가 AI 추천값으로 미리 채워집니다.');
-  e.scores[c.id] = ai.score;
+  e.scores[c.id] = slidePick(ai);
   save();
   renderDashboard();
-  toast(`교수 채점의 "${c.name}" 점수를 ${ai.score}점으로 반영했습니다.`);
+  renderSlides();
+  toast(`교수 채점의 "${c.name}" 점수를 ${slidePick(ai)}점으로 반영했습니다.`);
 }
 
 // ---------- 팀 등록 · 순서 섞기 ----------
@@ -1545,14 +1592,14 @@ function renderTeamInfo() {
   const doneAll = !t && S.teams.length;
   $('teamInfo').innerHTML = t
     ? `<b class="text-ink">${esc(t.name)}</b> · ${esc(t.topic)}<br>팀원: ${esc(t.members.join(', ') || '미입력')}${S.role === 'prof' && alreadyEvaluated(t.id) ? '<br><b class="text-ink">이미 채점한 팀입니다. 제출하면 교수 점수를 새로 바꿉니다.</b>' : ''}${S.role === 'prof' && S.slideAI[slideKey(t.id)] && slideCrit()
-      ? `<br><span style="color:rgb(47,123,246)">📎 발표자료 AI 추천 ${S.slideAI[slideKey(t.id)].score}점을 채워 두었습니다. 필요하면 고치세요.</span>` : ''}`
+      ? `<br><span style="color:rgb(47,123,246)">📎 발표자료 제안 점수 ${slidePick(S.slideAI[slideKey(t.id)])}점을 채워 두었습니다. 필요하면 고치세요.</span>` : ''}`
     : doneAll ? '✔ 평가할 수 있는 팀을 모두 평가했습니다.' : '등록된 팀이 없습니다.';
   $('submitEval').disabled = !t;
 }
 $('teamSelect').onchange = () => { resetScores(); renderTeamInfo(); };
 function prefillSlide() {
   const c = slideCrit(), ai = S.slideAI[slideKey($('teamSelect').value)];
-  if (S.role === 'prof' && c && ai && setters[c.id]) setters[c.id](ai.score);
+  if (S.role === 'prof' && c && ai && setters[c.id]) setters[c.id](slidePick(ai));
 }
 
 function renderForm() {
@@ -1794,11 +1841,11 @@ function renderReport(rows) {
 function slideBox(teamId) {
   const m = S.slides[slideKey(teamId)], ai = S.slideAI[slideKey(teamId)];
   return `<div class="glass-chip rounded-3xl p-4 space-y-3 min-w-0 md:col-span-2">
-    <p class="text-xs font-bold">📎 발표자료 AI 분석 <span class="font-normal text-mute">${m ? `${esc(m.name)}${m.n ? ` · 슬라이드 ${m.n}장` : ''}` : '올린 발표자료가 없습니다 (TEAMS에서 올리기)'}</span></p>
-    ${ai ? `<p class="text-sm"><b class="font-disp text-2xl" style="color:rgb(47,123,246)">${ai.score}</b><span class="text-xs text-mute">/5</span> · ${esc(ai.summary || '')}</p>
+    <p class="text-xs font-bold">📎 발표자료 점수 제안 <span class="font-normal text-mute">${m ? `${esc(m.name)}${m.n ? ` · 슬라이드 ${m.n}장` : ''}` : '올린 발표자료가 없습니다 (TEAMS에서 올리기)'}</span></p>
+    ${ai ? `<p class="text-sm"><b class="font-disp text-2xl" style="color:rgb(47,123,246)">${slidePick(ai)}</b><span class="text-xs text-mute">/5 제안</span> · ${esc(ai.summary || '')}</p>
       <div class="ai-out">${aiHTML(ai.text)}</div><p class="!text-[10px] text-mute">${ai.auto ? '글자 분량 기준 자동 점검 (API 키를 넣으면 AI가 분석)' : `${esc(ai.by || 'AI')} · ${new Date(ai.at).toLocaleString('ko-KR')}`}</p>` : ''}
-    ${m ? `<div class="flex flex-wrap gap-2"><button type="button" id="rpSlideAi" class="pill pill-dark px-4 text-xs">🤖 ${ai ? '다시 분석' : '발표자료 AI 분석'}</button>
-      ${ai && slideCrit() ? `<button type="button" id="rpSlideApply" class="pill px-4 text-xs">교수 점수에 반영 (${ai.score}점)</button>` : ''}</div>` : ''}
+    ${m ? `<div class="flex flex-wrap gap-2"><button type="button" id="rpSlideAi" class="pill pill-dark px-4 text-xs">🤖 ${ai ? '다시 제안' : '발표자료 점수 제안'}</button>
+      ${ai && slideCrit() ? `<button type="button" id="rpSlideApply" class="pill px-4 text-xs">교수 점수에 반영 (${slidePick(ai)}점)</button>` : ''}</div>` : ''}
   </div>`;
 }
 function aiHTML(text) {
@@ -1885,8 +1932,8 @@ function downloadCsv() {
   const sl = S.teams.filter(t => S.slides[slideKey(t.id)]);
   if (sl.length) {
     out.push(['[발표자료 분석]']);
-    out.push(['팀', '파일', '슬라이드 수', 'AI 점수(5)', '총평']);
-    sl.forEach(t => { const m = S.slides[slideKey(t.id)], a = S.slideAI[slideKey(t.id)]; out.push([t.name, m.name, m.n || '', a?.score ?? '', a?.summary || '']); });
+    out.push(['팀', '파일', '슬라이드 수', 'AI 점수(5)', '제안 점수(5)', '근거']);
+    sl.forEach(t => { const m = S.slides[slideKey(t.id)], a = S.slideAI[slideKey(t.id)]; out.push([t.name, m.name, m.n || '', a?.score ?? '', slidePick(a) ?? '', a?.summary || '']); });
     out.push([]);
   }
   out.push(['[평가자별 편차]']);
@@ -1928,7 +1975,7 @@ function buildDashboardHTML() {
         <tr><td class="l font-bold">환산 점수</td><td></td><td class="font-disp font-semibold">${fmt(x.peerScore, 1)} / ${S.peerPts}</td><td class="font-disp font-semibold">${x.profScore == null ? '미채점' : fmt(x.profScore, 1)} / ${100 - S.peerPts}</td></tr></tbody></table></div>
       <div class="glass-chip rounded-2xl p-4"><p class="text-xs font-bold mb-2">🤖 종합 피드백 <span class="font-normal text-mute">${ai && !ai.auto ? esc(ai.by || 'AI') : '점수 기반 자동 요약'}</span></p>
         <div class="ai-out">${aiHTML(ai ? ai.text : autoFeedback(x))}</div></div>
-      ${S.slideAI[slideKey(x.team.id)] ? `<div class="glass-chip rounded-2xl p-4"><p class="text-xs font-bold mb-2">📎 발표자료 분석 <b style="color:rgb(47,123,246)">${S.slideAI[slideKey(x.team.id)].score}/5</b>
+      ${S.slideAI[slideKey(x.team.id)] ? `<div class="glass-chip rounded-2xl p-4"><p class="text-xs font-bold mb-2">📎 발표자료 분석 <b style="color:rgb(47,123,246)">${slidePick(S.slideAI[slideKey(x.team.id)])}/5</b>
         <span class="font-normal text-mute">${esc(S.slides[slideKey(x.team.id)]?.name || '')}</span></p><p class="text-[13px] mb-1">${esc(S.slideAI[slideKey(x.team.id)].summary || '')}</p>
         <div class="ai-out">${aiHTML(S.slideAI[slideKey(x.team.id)].text)}</div></div>` : ''}
       <ul class="space-y-2">${x.feedback.map(e => `<li class="sunk rounded-2xl px-3 py-2 text-[13px] leading-relaxed">${esc(e.feedback)}<span class="block text-[10px] text-mute mt-0.5">${e.role === 'prof' ? '🎓 교수' : esc(e.evaluator?.name || '익명')}</span></li>`).join('') || '<li class="text-xs text-mute">한 줄 피드백이 없습니다.</li>'}</ul>
@@ -2631,7 +2678,7 @@ ${rows.map((row, r) => `<hp:tr>${row.map(([t, head], c) => cell(t, c, r, head)).
       return h ? para(run(`■ ${h[1]}`, 9)) : para(run(l.replace(/^[-*•]\s*/, '· ')), 0);
     }),
     ...(S.slideAI[slideKey(x.team.id)] ? (sa => [empty(),
-      para(run(`발표자료 분석 — ${sa.score} / 5${S.slides[slideKey(x.team.id)] ? ` (${S.slides[slideKey(x.team.id)].name})` : ''}`, 13)),
+      para(run(`발표자료 분석 — 제안 점수 ${slidePick(sa)} / 5${S.slides[slideKey(x.team.id)] ? ` (${S.slides[slideKey(x.team.id)].name})` : ''}`, 13)),
       ...(sa.summary ? [para(run(sa.summary))] : []),
       ...String(sa.text).split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => /^(잘한 점|개선점|구체적 제안)$/.test(l) ? para(run(`■ ${l}`, 9)) : para(run(l.replace(/^[-*•]\s*/, '· '))))
     ])(S.slideAI[slideKey(x.team.id)]) : []),
