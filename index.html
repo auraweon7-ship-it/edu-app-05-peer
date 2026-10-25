@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <script id="twConfig">
@@ -312,6 +313,7 @@
         <div id="rubricList" class="space-y-3"></div>
         <div class="flex flex-wrap items-center gap-2">
           <button id="addCrit" type="button" class="pill px-4 text-xs">＋ 항목 추가</button>
+          <button id="addSlideCrit" type="button" class="pill px-4 text-xs">📎 발표자료 항목 추가</button>
           <button id="resetRubric" type="button" class="pill px-4 text-xs">기본 루브릭으로</button>
           <span id="weightSum" class="ml-auto text-xs font-semibold rounded-full px-3 py-1.5"></span>
         </div>
@@ -327,6 +329,14 @@
       <div id="body-teams" class="space-y-3">
         <label class="block"><span class="block text-xs font-bold mb-1.5">평가 세트 이름 · 발표 주제</span>
           <input id="setTitle" type="text" class="field" placeholder="예: 중간 팀 프로젝트 발표"></label>
+        <div class="glass rounded-3xl p-4 space-y-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-xs font-bold mr-auto">📎 팀별 발표자료 <span class="font-normal text-mute">(PPTX · PDF · PPT)</span></p>
+            <span id="slideCount" class="text-[11px] text-mute"></span>
+          </div>
+          <ul id="slideList" class="space-y-2"></ul>
+          <p class="text-[11px] text-mute leading-relaxed">발표자료는 이 컴퓨터의 브라우저에만 보관되고 학생 휴대폰에는 보내지 않습니다. <b class="text-ink">AI 분석</b>은 PPTX의 글과 PDF를 읽어 루브릭의 "발표자료" 항목 점수(1~5점)와 피드백 초안을 만들고, 교수 채점에 반영할 수 있습니다.</p>
+        </div>
         <label class="block"><span class="block text-xs font-bold mb-1.5">팀 목록 <span class="font-normal text-mute">(한 줄에 한 팀, 쉼표로 구분: 팀명, 발표 주제, 팀원1, 팀원2 …)</span></span>
           <textarea id="teamText" rows="6" class="field rounded-2xl leading-relaxed resize-y" placeholder="1팀, 한류 콘텐츠의 중국 진출, 김민준, 이서연&#10;2팀, 중국 MZ세대 소비, 최유진, 정하늘"></textarea></label>
         <div class="flex flex-wrap gap-2">
@@ -562,6 +572,8 @@
 
 <script>
 // 화면·저장 파일에 표시되는 앱 버전. 수정할 때마다 올림: 새 기능 → 둘째 자리, 고침·디자인 → 셋째 자리
+// v2.0.0  팀별 발표자료(PPTX·PDF·PPT) 업로드(브라우저 IndexedDB 보관), 루브릭 "발표자료" 항목(20%) 추가,
+//         발표자료 AI 분석(PPTX 글 추출·PDF 첨부 → 1~5점·피드백) → 교수 채점 자동 채움·반영, 결과지·대시보드·CSV에 표시
 // v1.9.0  DEPLOY(학생 평가지 HTML) 삭제, EVAL HISTORY에 세트 저장 버튼·평가 결과 CSV·결과 대시보드 HTML 다운로드
 // v1.8.0  학생 평가 파일 불러오기 삭제, 학생 평가 탭에 QR 입장 학생 명단(접속·제출 현황), QR 크게 보기는 새 창으로
 // v1.7.2  실시간 입장 화면에서 팀 선택 제거: 학생은 평가만, 소속 팀은 팀 명단 이름으로 자동 확인(띄어쓰기 무시)
@@ -579,7 +591,7 @@
 // v1.2.0  STEP 3: 루브릭 편집기·AI 루브릭 추천, 팀 일괄 등록·순서 섞기, 자기 팀·중복 평가 차단, 발표 타이머, 극단값 보정·교수 점수 비율
 // v1.1.0  STEP 2: Claude·OpenAI·Gemini 연결 확인·모델 제안, AI 종합 피드백, 키 저장 끄기·삭제, COURSE INFO, 접기·펼치기
 // v1.0.0  STEP 1: 팀 선택·별점+슬라이더 평가·한 줄 피드백·순위표·막대그래프·CSV, 샘플 팀 5개·평가 20건
-const APP_VERSION = 'v1.9.0';
+const APP_VERSION = 'v2.0.0';
 // ?live=방ID 로 열리면 학생 실시간 평가 화면으로 작동
 const LIVE_ID = new URLSearchParams(location.search).get('live');
 
@@ -693,7 +705,22 @@ const DEFAULT_RUBRIC = [
   ['시간 관리', ['제한 시간을 크게 벗어남', '시간 배분이 한쪽으로 치우침', '조금 넘치거나 모자라지만 마무리함', '제한 시간 안에 균형 있게 마침', '핵심에 시간을 집중하며 정확히 시간을 지킴']],
   ['질의응답', ['질문에 답하지 못함', '답변이 질문 의도와 어긋남', '기본적인 답변은 가능함', '질문 의도를 파악하고 근거를 들어 답변함', '추가 자료·사례까지 들어 설득력 있게 답변함']]
 ];
-const defaultRubric = () => DEFAULT_RUBRIC.map(([name, desc], i) => ({ id: `c${i + 1}`, name, weight: 20, desc: [...desc] }));
+// 발표자료 항목: 업로드한 PPT를 AI가 분석해 점수를 추천하는 항목 (slide: true)
+const SLIDE_CRIT = () => ({ id: 'cslide', name: '발표자료', weight: 20, slide: true,
+  desc: ['슬라이드가 없거나 발표 내용과 맞지 않음', '글자가 빽빽하고 핵심 메시지가 드러나지 않음', '필요한 내용은 담겼으나 구성·시각적 정리가 부족함',
+    '핵심 메시지가 분명하고 도표·이미지·구성이 적절함', '구성·시각화·출처 표기까지 완성도가 높아 발표 이해를 크게 도움'] });
+const defaultRubric = () => [...DEFAULT_RUBRIC.map(([name, desc], i) => ({ id: `c${i + 1}`, name, weight: 16, desc: [...desc] })), SLIDE_CRIT()];
+const slideCrit = () => S.rubric.find(c => c.slide) || S.rubric.find(c => c.name === '발표자료');
+// 기존 루브릭에 발표자료 항목 추가: 다른 항목 가중치를 80%로 줄이고 발표자료 20%
+function addSlideCrit() {
+  if (slideCrit()) return false;
+  const sum = S.rubric.reduce((a, c) => a + (+c.weight || 0), 0) || 100;
+  S.rubric.forEach(c => c.weight = Math.round((+c.weight || 0) / sum * 80));
+  const diff = 80 - S.rubric.reduce((a, c) => a + c.weight, 0);
+  if (S.rubric.length && diff) S.rubric.reduce((m, c) => (c.weight > m.weight ? c : m)).weight += diff;
+  S.rubric.push(SLIDE_CRIT());
+  return true;
+}
 const SAMPLE_TEAMS = [
   ['1팀', '한류 콘텐츠의 중국 시장 진출 전략', ['김민준', '이서연', '박지호']],
   ['2팀', '중국 MZ세대의 소비 트렌드', ['최유진', '정하늘', '강도윤']],
@@ -719,6 +746,7 @@ const S = {
   collapsed: { ai: false, course: false, rubric: false, teams: false, opt: false },
   formMode: 'all', trim: true, peerPts: 30, timerMin: 5,
   liveBase: '', liveId: '', liveOn: false, liveFocus: '', liveNext: '', roster: [],
+  slides: {}, slideAI: {}, slideCritAdded: false,
   role: 'student', evaluator: { name: '', sid: '', dept: '', team: '' },
   setId: 'sample', setTitle: '', sampleMode: true,
   rubric: defaultRubric(), teams: [], evals: [], ai: {}, history: []
@@ -728,10 +756,10 @@ function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (!s || typeof s !== 'object') return;
-    for (const k of ['provider', 'remember', 'formMode', 'trim', 'peerPts', 'timerMin', 'role', 'setId', 'setTitle', 'sampleMode', 'liveBase', 'liveId', 'liveOn', 'liveFocus', 'liveNext'])
+    for (const k of ['provider', 'remember', 'formMode', 'trim', 'peerPts', 'timerMin', 'role', 'setId', 'setTitle', 'sampleMode', 'liveBase', 'liveId', 'liveOn', 'liveFocus', 'liveNext', 'slideCritAdded'])
       if (k in s && typeof s[k] === typeof S[k]) S[k] = s[k];
     if (!PROVIDERS[S.provider]) S.provider = 'claude';
-    for (const k of ['models', 'keys', 'course', 'collapsed', 'evaluator', 'ai'])
+    for (const k of ['models', 'keys', 'course', 'collapsed', 'evaluator', 'ai', 'slides', 'slideAI'])
       if (s[k] && typeof s[k] === 'object') Object.assign(S[k], s[k]);
     for (const k of ['rubric', 'teams', 'evals', 'history', 'roster']) if (Array.isArray(s[k])) S[k] = s[k];
     if (!S.rubric.length) S.rubric = defaultRubric();
@@ -747,6 +775,7 @@ function save() {
   } catch { return false; }
 }
 loadState();
+if (!S.slideCritAdded) { addSlideCrit(); S.slideCritAdded = true; } // 한 번만: 저장된 루브릭에도 발표자료 항목 추가
 
 // ---------- 샘플: 등록된 팀이 없으면 팀 5개 + 평가 20건 ----------
 function seededRandom(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
@@ -789,6 +818,7 @@ function refreshSampleEvals() {
   Object.keys(S.ai).forEach(k => k.startsWith('st') && delete S.ai[k]);
 }
 if (!S.teams.length) useSample();
+else if (S.sampleMode && S.evals.some(e => e.sample && e.scores && !(slideCrit()?.id in e.scores))) refreshSampleEvals();
 
 // ---------- 공통 ----------
 let toastTimer;
@@ -971,17 +1001,19 @@ async function postJSON(url, headers, payload) {
   return body;
 }
 const REQUESTERS = {
-  async claude(key, model, text) {
+  async claude(key, model, text, json, pdf) {
+    const content = pdf ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.base64 } }, { type: 'text', text }] : text;
     const body = await postJSON('https://api.anthropic.com/v1/messages', {
       'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'
-    }, { model, max_tokens: 4096, messages: [{ role: 'user', content: text }] });
+    }, { model, max_tokens: 4096, messages: [{ role: 'user', content }] });
     return (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
   },
-  async openai(key, model, text, json) {
+  async openai(key, model, text, json, pdf) {
     const auth = { authorization: `Bearer ${key}` };
+    const content = pdf ? [{ type: 'file', file: { filename: pdf.name, file_data: `data:application/pdf;base64,${pdf.base64}` } }, { type: 'text', text }] : text;
     try {
       const body = await postJSON('https://api.openai.com/v1/chat/completions', auth,
-        { model, ...(json ? { response_format: { type: 'json_object' } } : {}), messages: [{ role: 'user', content: text }] });
+        { model, ...(json ? { response_format: { type: 'json_object' } } : {}), messages: [{ role: 'user', content }] });
       return body.choices?.[0]?.message?.content || '';
     } catch (err) {
       // pro·codex 계열처럼 Chat Completions를 지원하지 않는 모델은 Responses API로 다시 요청
@@ -991,16 +1023,17 @@ const REQUESTERS = {
       return (body.output || []).flatMap(o => o.content || []).filter(c => c.type === 'output_text').map(c => c.text).join('');
     }
   },
-  async gemini(key, model, text, json) {
+  async gemini(key, model, text, json, pdf) {
+    const parts = pdf ? [{ inline_data: { mime_type: 'application/pdf', data: pdf.base64 } }, { text }] : [{ text }];
     const body = await postJSON(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      { 'x-goog-api-key': key }, { contents: [{ role: 'user', parts: [{ text }] }], ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}) });
+      { 'x-goog-api-key': key }, { contents: [{ role: 'user', parts }], ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}) });
     return (body.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
   }
 };
-function askAI(text, json = false) {
+function askAI(text, json = false, pdf = null) {
   const key = S.keys[S.provider].trim();
   if (!key) return Promise.reject(new Error('NOKEY'));
-  return REQUESTERS[S.provider](key, S.models[S.provider] || PROVIDERS[S.provider].model, text, json);
+  return REQUESTERS[S.provider](key, S.models[S.provider] || PROVIDERS[S.provider].model, text, json, pdf);
 }
 
 // ---------- 강의 정보 + 설정 내보내기/불러오기 ----------
@@ -1057,7 +1090,8 @@ function renderRubric() {
     <div class="glass rounded-3xl p-4 space-y-3" data-rid="${esc(c.id)}">
       <div class="flex items-center gap-2">
         <span class="crit-no">${i + 1}</span>
-        <input type="text" data-f="name" value="${esc(c.name)}" class="field flex-1 min-w-0 !py-2 font-semibold" aria-label="${i + 1}번 항목 이름" maxlength="30">
+        <input type="text" data-f="name" value="${esc(c.name)}" class="field flex-1 min-w-0 !py-2 font-semibold" aria-label="${i + 1}번 항목 이름" maxlength="30"
+          ${c.slide ? 'title="업로드한 발표자료를 AI가 분석해 점수를 추천하는 항목"' : ''}>${c.slide ? '<span class="flex-none glass-chip rounded-full px-2 py-1 text-[10px] font-semibold" style="color:rgb(47,123,246)">📎 AI</span>' : ''}
         <label class="flex items-center gap-1 flex-none"><input type="number" data-f="weight" value="${esc(c.weight)}" min="0" max="100" step="5" inputmode="numeric"
           class="field !w-[4.6rem] !px-2 !py-2 text-center font-disp" aria-label="${esc(c.name)} 가중치(%)"><span class="text-xs text-mute">%</span></label>
         <button type="button" data-del="${esc(c.id)}" class="pill sm !min-h-[2.75rem] w-11 flex-none text-sm" aria-label="${esc(c.name)} 항목 삭제" ${S.rubric.length <= 1 ? 'disabled' : ''}>✕</button>
@@ -1087,6 +1121,7 @@ function renderRubric() {
   renderWeightSum();
 }
 function renderWeightSum() {
+  $('addSlideCrit').classList.toggle('hidden', !!slideCrit());
   const sum = S.rubric.reduce((a, c) => a + (+c.weight || 0), 0);
   const el = $('weightSum');
   el.className = `ml-auto text-xs font-semibold rounded-full px-3 py-1.5 ${sum === 100 ? 'glass-ok' : 'glass-ng'}`;
@@ -1111,6 +1146,7 @@ $('addCrit').onclick = () => {
   const inputs = $('rubricList').querySelectorAll('[data-f=name]');
   inputs[inputs.length - 1].select();
 };
+$('addSlideCrit').onclick = () => { if (addSlideCrit()) { onRubricChanged(true); toast('발표자료 항목(20%)을 추가하고 다른 항목 가중치를 비율대로 줄였습니다.'); } };
 $('resetRubric').onclick = () => {
   if (!confirm('기본 루브릭(전달력·논리성·자료 완성도·시간 관리·질의응답)으로 되돌릴까요?')) return;
   S.rubric = defaultRubric();
@@ -1150,6 +1186,161 @@ $('aiRubricBtn').onclick = async () => {
     btn.textContent = 'AI 루브릭 추천';
   }
 };
+
+// ---------- 팀별 발표자료: 파일은 IndexedDB(용량 큼), 목록·분석 결과는 설정과 함께 저장 ----------
+const fileDB = (() => {
+  let dbp;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('peerscore-files', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('slides');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+  const tx = async (mode, fn) => {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const t = db.transaction('slides', mode), req = fn(t.objectStore('slides'));
+      t.oncomplete = () => res(req.result);
+      t.onerror = () => rej(t.error);
+    });
+  };
+  return { put: (k, v) => tx('readwrite', st => st.put(v, k)), get: k => tx('readonly', st => st.get(k)), del: k => tx('readwrite', st => st.delete(k)) };
+})();
+const slideKey = teamId => `${S.setId}|${teamId}`;
+const fmtSize = b => b >= 1048576 ? `${(b / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(b / 1024))}KB`;
+const SLIDE_MAX = 100 * 1048576;
+// PPTX = ZIP 안의 ppt/slides/slideN.xml → 슬라이드별 글자(<a:t>) 추출
+async function pptxText(file) {
+  const zip = await JSZip.loadAsync(file);
+  const no = n => +n.match(/slide(\d+)\.xml$/)[1];
+  const names = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => no(a) - no(b));
+  const dec = t => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  const per = [];
+  for (const n of names) {
+    const xml = await zip.file(n).async('string');
+    per.push(xml.split(/<\/a:p>/).map(par => [...par.matchAll(/<a:t(?:\s[^>]*)?>([^<]*)<\/a:t>/g)].map(m => dec(m[1])).join('')).filter(Boolean).join(' / '));
+  }
+  return { n: per.length, text: per.map((t, i) => `[슬라이드 ${i + 1}] ${t || '(글자 없음)'}`).join('\n'), per };
+}
+function renderSlides() {
+  const has = S.teams.filter(t => S.slides[slideKey(t.id)]).length;
+  $('slideCount').textContent = `${has} / ${S.teams.length}팀 등록`;
+  $('slideList').innerHTML = S.teams.map((t, i) => {
+    const k = slideKey(t.id), m = S.slides[k], ai = S.slideAI[k];
+    return `<li class="glass-chip rounded-2xl px-3 py-2.5 space-y-2" data-slide="${esc(t.id)}">
+      <div class="flex flex-wrap items-center gap-2 min-w-0">
+        <span class="crit-no">${i + 1}</span><b class="text-sm">${esc(t.name)}</b>
+        <span class="text-[11px] text-mute min-w-0 flex-1 truncate">${m ? `📄 ${esc(m.name)} · ${fmtSize(m.size)}${m.n ? ` · 슬라이드 ${m.n}장` : ''}` : '발표자료 없음'}</span>
+        <span class="flex flex-wrap gap-1.5">
+          <label class="pill sm px-3 text-[11px]">${m ? '교체' : '📎 올리기'}<input type="file" data-up="${esc(t.id)}" accept=".pptx,.ppt,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint" class="sr-only"></label>
+          ${m ? `<button type="button" class="pill sm px-3 text-[11px]" data-sopen="${esc(t.id)}">열기</button>
+          <button type="button" class="pill sm pill-dark px-3 text-[11px]" data-sai="${esc(t.id)}">🤖 ${ai ? '다시 분석' : 'AI 분석'}</button>
+          <button type="button" class="pill sm px-3 text-[11px] hover:!text-[#d0544a]" data-sdel="${esc(t.id)}" aria-label="${esc(t.name)} 발표자료 삭제">✕</button>` : ''}
+        </span>
+      </div>
+      ${ai ? `<p class="sunk rounded-xl px-3 py-2 text-[12px] leading-relaxed"><b style="color:rgb(47,123,246)">발표자료 ${ai.score}/5</b> · ${esc(ai.summary || '')}</p>` : ''}
+    </li>`;
+  }).join('') || '<li class="text-[11px] text-mute">팀을 먼저 등록하세요.</li>';
+  $('slideList').querySelectorAll('[data-up]').forEach(inp => inp.onchange = () => { const f = inp.files[0]; inp.value = ''; if (f) uploadSlide(inp.dataset.up, f); });
+  $('slideList').querySelectorAll('[data-sopen]').forEach(b => b.onclick = () => openSlide(b.dataset.sopen));
+  $('slideList').querySelectorAll('[data-sai]').forEach(b => b.onclick = () => analyzeSlide(b.dataset.sai, b));
+  $('slideList').querySelectorAll('[data-sdel]').forEach(b => b.onclick = () => deleteSlide(b.dataset.sdel));
+}
+async function uploadSlide(teamId, file) {
+  const t = teamById(teamId), ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['pptx', 'ppt', 'pdf'].includes(ext)) return toast('PPTX·PPT·PDF 파일만 올릴 수 있습니다.');
+  if (file.size > SLIDE_MAX) return toast('100MB보다 큰 파일은 올릴 수 없습니다.');
+  let info = { n: 0, text: '' };
+  if (ext === 'pptx') {
+    try { info = window.JSZip ? await pptxText(file) : info; } catch { toast('PPTX 내용을 읽지 못했습니다. 파일은 보관하지만 AI 분석은 PDF로 저장해 올리세요.'); }
+  }
+  const k = slideKey(teamId);
+  try { await fileDB.put(k, { blob: file, name: file.name, type: file.type, ext, text: info.text }); }
+  catch { return toast('이 브라우저에 파일을 저장할 수 없습니다(시크릿 모드·저장 공간 확인).'); }
+  S.slides[k] = { name: file.name, size: file.size, ext, n: info.n, chars: info.text.length, at: Date.now() };
+  delete S.slideAI[k];
+  save();
+  renderSlides();
+  toast(`📎 ${t?.name} 발표자료를 올렸습니다.${ext === 'ppt' ? ' (PPT는 AI 분석을 위해 PPTX·PDF로 저장해 올리는 것을 권장합니다)' : ''}`);
+}
+async function openSlide(teamId) {
+  const rec = await fileDB.get(slideKey(teamId)).catch(() => null);
+  if (!rec) return toast('이 브라우저에서 파일을 찾지 못했습니다. 다시 올려 주세요.');
+  if (rec.ext === 'pdf') { const u = URL.createObjectURL(rec.blob); window.open(u, '_blank') || K.download(rec.blob, rec.name); setTimeout(() => URL.revokeObjectURL(u), 60000); }
+  else K.download(rec.blob, rec.name); // PPT는 브라우저에서 바로 볼 수 없어 내려받아 PowerPoint로 엶
+}
+async function deleteSlide(teamId) {
+  const t = teamById(teamId);
+  if (!confirm(`${t?.name} 발표자료를 삭제할까요?`)) return;
+  const k = slideKey(teamId);
+  await fileDB.del(k).catch(() => {});
+  delete S.slides[k];
+  delete S.slideAI[k];
+  save();
+  renderSlides();
+  renderDashboard();
+}
+// 키가 없을 때: 슬라이드 수·장당 글자 수로 간단 점검
+function slideHeuristic(meta, rec) {
+  const n = meta.n, avg = n ? Math.round((rec?.text || '').replace(/\[슬라이드 \d+\]/g, '').length / n) : 0;
+  let score = !n ? 3 : avg <= 120 ? 5 : avg <= 200 ? 4 : avg <= 300 ? 3 : 2;
+  if (n && n < 4) score = Math.min(score, 2);
+  return { score, auto: true, summary: n ? `슬라이드 ${n}장, 장당 평균 ${avg}자 (글자 분량 기준 자동 점검)` : '글자를 읽을 수 없어 기본 점수로 표시',
+    text: ['잘한 점', `- 슬라이드 ${n || '?'}장으로 발표를 구성했습니다.`, '개선점', avg > 200 ? '- 장당 글자가 많아 청중이 읽기 어렵습니다.' : '- 핵심 메시지가 한눈에 보이는지 점검하세요.',
+      '구체적 제안', '- 한 장에 한 메시지, 도표·이미지로 근거를 보여 주세요.', '- API 키를 넣으면 AI가 내용까지 읽고 분석합니다.'].join('\n') };
+}
+async function analyzeSlide(teamId, btn) {
+  const t = teamById(teamId), k = slideKey(teamId), meta = S.slides[k], c = slideCrit();
+  if (!meta) return toast('발표자료를 먼저 올리세요.');
+  const rec = await fileDB.get(k).catch(() => null);
+  if (!rec) return toast('이 브라우저에서 파일을 찾지 못했습니다. 다시 올려 주세요.');
+  if (!S.keys[S.provider].trim()) {
+    S.slideAI[k] = { ...slideHeuristic(meta, rec), at: Date.now() };
+    save(); renderSlides(); renderDashboard();
+    return toast('API 키가 없어 글자 분량으로 자동 점검했습니다. AI 분석은 AI SETTING에 키를 넣으세요.');
+  }
+  if (rec.ext === 'ppt' || (rec.ext === 'pptx' && !rec.text)) return toast('이 파일은 글자를 읽을 수 없습니다. PowerPoint에서 PPTX 또는 PDF로 저장해 다시 올리세요.');
+  if (rec.ext === 'pdf' && rec.blob.size > 20 * 1048576) return toast('AI 분석은 20MB 이하 PDF만 가능합니다.');
+  const label = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>분석 중'; }
+  try {
+    const pdf = rec.ext === 'pdf' ? { name: rec.name, base64: await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(rec.blob); }) } : null;
+    const desc = (c?.desc || SLIDE_CRIT().desc).map((d, i) => `${i + 1}점: ${d}`).join('\n');
+    const out = await askAI(`당신은 대학 발표 수업의 발표자료(슬라이드) 평가 전문가입니다.
+팀: ${t.name} / 발표 주제: ${t.topic || '미입력'}${S.course.course ? ` / 과목: ${S.course.course}` : ''}
+평가 항목 "${c?.name || '발표자료'}"의 점수 기준:
+${desc}
+${pdf ? '첨부한 PDF 발표자료' : `아래 슬라이드 글(PPTX에서 추출, ${meta.n}장)`}를 근거로 위 기준에 따라 1~5점 정수로 채점하세요.
+구성·핵심 메시지의 선명함·장당 글자 분량·논리 흐름·근거와 출처 표기를 중심으로 판단하고,${pdf ? '' : ' 이미지·도표는 글로 보이지 않으므로 글에 드러난 것만 판단하고,'} 근거 없는 칭찬은 하지 마세요.
+다른 설명 없이 JSON만 출력하세요:
+{"score":3,"summary":"한 문장 총평","strengths":["",""],"improvements":["",""],"suggestions":["",""]}${pdf ? '' : `\n<슬라이드>\n${rec.text.slice(0, 30000)}\n</슬라이드>`}`, true, pdf);
+    const m = out.match(/\{[\s\S]*\}/);
+    const d = JSON.parse(m ? m[0] : out);
+    const score = Math.min(5, Math.max(1, Math.round(+d.score) || 3));
+    const list = a => (Array.isArray(a) ? a : []).filter(Boolean).slice(0, 3).map(x => `- ${x}`);
+    S.slideAI[k] = { score, summary: String(d.summary || ''), text: ['잘한 점', ...list(d.strengths), '개선점', ...list(d.improvements), '구체적 제안', ...list(d.suggestions)].join('\n'),
+      by: `${PROVIDERS[S.provider].name} ${S.models[S.provider]}`, at: Date.now() };
+    save();
+    renderSlides();
+    renderDashboard();
+    renderTeamInfo();
+    toast(`🤖 ${t.name} 발표자료 분석 완료 · ${score}/5`);
+  } catch (err) {
+    toast(`AI 분석 실패 — ${err.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+// 교수 채점의 발표자료 점수를 AI 추천 점수로 바꿈
+function applySlideScore(teamId) {
+  const c = slideCrit(), ai = S.slideAI[slideKey(teamId)];
+  if (!c || !ai) return;
+  const e = curEvals().find(x => x.teamId === teamId && x.role === 'prof');
+  if (!e) return toast('아직 교수 채점이 없습니다. 교수 평가 탭에서 이 팀을 고르면 발표자료 점수가 AI 추천값으로 미리 채워집니다.');
+  e.scores[c.id] = ai.score;
+  save();
+  renderDashboard();
+  toast(`교수 채점의 "${c.name}" 점수를 ${ai.score}점으로 반영했습니다.`);
+}
 
 // ---------- 팀 등록 · 순서 섞기 ----------
 const teamLine = t => [t.name, t.topic, ...t.members].join(', ');
@@ -1325,7 +1516,7 @@ function renderEvaluator() {
   $('rosterBox').classList.toggle('hidden', prof);
   renderRoster();
 }
-document.querySelectorAll('[data-role]').forEach(b => b.onclick = () => { S.role = b.dataset.role; save(); renderEvaluator(); renderTeamSelect(); });
+document.querySelectorAll('[data-role]').forEach(b => b.onclick = () => { S.role = b.dataset.role; save(); renderEvaluator(); renderTeamSelect(); resetScores(); });
 [['evName', 'name'], ['evSid', 'sid'], ['evDept', 'dept']].forEach(([id, k]) => $(id).addEventListener('input', () => {
   S.evaluator[k] = $(id).value.trim();
   $(id).removeAttribute('aria-invalid');
@@ -1353,11 +1544,16 @@ function renderTeamInfo() {
   const t = teamById($('teamSelect').value);
   const doneAll = !t && S.teams.length;
   $('teamInfo').innerHTML = t
-    ? `<b class="text-ink">${esc(t.name)}</b> · ${esc(t.topic)}<br>팀원: ${esc(t.members.join(', ') || '미입력')}${S.role === 'prof' && alreadyEvaluated(t.id) ? '<br><b class="text-ink">이미 채점한 팀입니다. 제출하면 교수 점수를 새로 바꿉니다.</b>' : ''}`
+    ? `<b class="text-ink">${esc(t.name)}</b> · ${esc(t.topic)}<br>팀원: ${esc(t.members.join(', ') || '미입력')}${S.role === 'prof' && alreadyEvaluated(t.id) ? '<br><b class="text-ink">이미 채점한 팀입니다. 제출하면 교수 점수를 새로 바꿉니다.</b>' : ''}${S.role === 'prof' && S.slideAI[slideKey(t.id)] && slideCrit()
+      ? `<br><span style="color:rgb(47,123,246)">📎 발표자료 AI 추천 ${S.slideAI[slideKey(t.id)].score}점을 채워 두었습니다. 필요하면 고치세요.</span>` : ''}`
     : doneAll ? '✔ 평가할 수 있는 팀을 모두 평가했습니다.' : '등록된 팀이 없습니다.';
   $('submitEval').disabled = !t;
 }
 $('teamSelect').onchange = () => { resetScores(); renderTeamInfo(); };
+function prefillSlide() {
+  const c = slideCrit(), ai = S.slideAI[slideKey($('teamSelect').value)];
+  if (S.role === 'prof' && c && ai && setters[c.id]) setters[c.id](ai.score);
+}
 
 function renderForm() {
   setters = {};
@@ -1403,6 +1599,7 @@ function resetScores() {
   stepIdx = 0;
   renderStep();
   $('formError').classList.add('hidden');
+  prefillSlide();
 }
 $('resetForm').onclick = resetScores;
 
@@ -1587,9 +1784,22 @@ function renderReport(rows) {
         <button type="button" id="aiFbBtn" class="pill pill-dark px-4 text-xs" ${x.n + x.profN ? '' : 'disabled'}>${ai ? '다시 만들기' : 'AI 종합 피드백 만들기'}</button>
         <button type="button" id="hwpxBtn" class="pill px-4 text-xs">팀 결과지 HWPX ↓</button>
       </div>
-    </div>`;
+    </div>
+    ${slideBox(x.team.id)}`;
+  $('rpSlideAi')?.addEventListener('click', e => analyzeSlide(x.team.id, e.currentTarget));
+  $('rpSlideApply')?.addEventListener('click', () => applySlideScore(x.team.id));
   $('aiFbBtn').onclick = () => makeTeamFeedback(x);
   $('hwpxBtn').onclick = () => downloadHwpx(x);
+}
+function slideBox(teamId) {
+  const m = S.slides[slideKey(teamId)], ai = S.slideAI[slideKey(teamId)];
+  return `<div class="glass-chip rounded-3xl p-4 space-y-3 min-w-0 md:col-span-2">
+    <p class="text-xs font-bold">📎 발표자료 AI 분석 <span class="font-normal text-mute">${m ? `${esc(m.name)}${m.n ? ` · 슬라이드 ${m.n}장` : ''}` : '올린 발표자료가 없습니다 (TEAMS에서 올리기)'}</span></p>
+    ${ai ? `<p class="text-sm"><b class="font-disp text-2xl" style="color:rgb(47,123,246)">${ai.score}</b><span class="text-xs text-mute">/5</span> · ${esc(ai.summary || '')}</p>
+      <div class="ai-out">${aiHTML(ai.text)}</div><p class="!text-[10px] text-mute">${ai.auto ? '글자 분량 기준 자동 점검 (API 키를 넣으면 AI가 분석)' : `${esc(ai.by || 'AI')} · ${new Date(ai.at).toLocaleString('ko-KR')}`}</p>` : ''}
+    ${m ? `<div class="flex flex-wrap gap-2"><button type="button" id="rpSlideAi" class="pill pill-dark px-4 text-xs">🤖 ${ai ? '다시 분석' : '발표자료 AI 분석'}</button>
+      ${ai && slideCrit() ? `<button type="button" id="rpSlideApply" class="pill px-4 text-xs">교수 점수에 반영 (${ai.score}점)</button>` : ''}</div>` : ''}
+  </div>`;
 }
 function aiHTML(text) {
   return String(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => {
@@ -1672,6 +1882,13 @@ function downloadCsv() {
   out.push(['순위', '팀', '발표 주제', '팀원', ...S.rubric.map(c => `${c.name}(${c.weight}%)`), `학생 점수(${S.peerPts})`, `교수 점수(${100 - S.peerPts})`, '합계(100)', '동료 평가 수', '교수 채점']);
   rows.forEach(x => out.push([x.rank ?? '', x.team.name, x.team.topic, x.team.members.join(' '), ...x.per.map(p => fmt(p.peer)), fmt(x.peerScore), fmt(x.profScore), fmt(x.total), x.n, x.profN ? 'O' : '']));
   out.push([]);
+  const sl = S.teams.filter(t => S.slides[slideKey(t.id)]);
+  if (sl.length) {
+    out.push(['[발표자료 분석]']);
+    out.push(['팀', '파일', '슬라이드 수', 'AI 점수(5)', '총평']);
+    sl.forEach(t => { const m = S.slides[slideKey(t.id)], a = S.slideAI[slideKey(t.id)]; out.push([t.name, m.name, m.n || '', a?.score ?? '', a?.summary || '']); });
+    out.push([]);
+  }
   out.push(['[평가자별 편차]']);
   out.push(['평가자', '학번', '평가 팀 수', '평균 점수', '편차', '평균 절대편차']);
   deviations().forEach(d => out.push([d.ev?.name, d.ev?.sid, d.teams, fmt(d.avg), fmt(d.bias), fmt(d.mad)]));
@@ -1711,6 +1928,9 @@ function buildDashboardHTML() {
         <tr><td class="l font-bold">환산 점수</td><td></td><td class="font-disp font-semibold">${fmt(x.peerScore, 1)} / ${S.peerPts}</td><td class="font-disp font-semibold">${x.profScore == null ? '미채점' : fmt(x.profScore, 1)} / ${100 - S.peerPts}</td></tr></tbody></table></div>
       <div class="glass-chip rounded-2xl p-4"><p class="text-xs font-bold mb-2">🤖 종합 피드백 <span class="font-normal text-mute">${ai && !ai.auto ? esc(ai.by || 'AI') : '점수 기반 자동 요약'}</span></p>
         <div class="ai-out">${aiHTML(ai ? ai.text : autoFeedback(x))}</div></div>
+      ${S.slideAI[slideKey(x.team.id)] ? `<div class="glass-chip rounded-2xl p-4"><p class="text-xs font-bold mb-2">📎 발표자료 분석 <b style="color:rgb(47,123,246)">${S.slideAI[slideKey(x.team.id)].score}/5</b>
+        <span class="font-normal text-mute">${esc(S.slides[slideKey(x.team.id)]?.name || '')}</span></p><p class="text-[13px] mb-1">${esc(S.slideAI[slideKey(x.team.id)].summary || '')}</p>
+        <div class="ai-out">${aiHTML(S.slideAI[slideKey(x.team.id)].text)}</div></div>` : ''}
       <ul class="space-y-2">${x.feedback.map(e => `<li class="sunk rounded-2xl px-3 py-2 text-[13px] leading-relaxed">${esc(e.feedback)}<span class="block text-[10px] text-mute mt-0.5">${e.role === 'prof' ? '🎓 교수' : esc(e.evaluator?.name || '익명')}</span></li>`).join('') || '<li class="text-xs text-mute">한 줄 피드백이 없습니다.</li>'}</ul>
     </section>`;
   }).join('');
@@ -2410,6 +2630,11 @@ ${rows.map((row, r) => `<hp:tr>${row.map(([t, head], c) => cell(t, c, r, head)).
       const h = l.match(/^(?:#+\s*|■\s*|\*\*)?\s*(잘한 점|개선점|구체적 제안)\s*(?:\*\*)?\s*:?\s*$/);
       return h ? para(run(`■ ${h[1]}`, 9)) : para(run(l.replace(/^[-*•]\s*/, '· ')), 0);
     }),
+    ...(S.slideAI[slideKey(x.team.id)] ? (sa => [empty(),
+      para(run(`발표자료 분석 — ${sa.score} / 5${S.slides[slideKey(x.team.id)] ? ` (${S.slides[slideKey(x.team.id)].name})` : ''}`, 13)),
+      ...(sa.summary ? [para(run(sa.summary))] : []),
+      ...String(sa.text).split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => /^(잘한 점|개선점|구체적 제안)$/.test(l) ? para(run(`■ ${l}`, 9)) : para(run(l.replace(/^[-*•]\s*/, '· '))))
+    ])(S.slideAI[slideKey(x.team.id)]) : []),
     empty(),
     para(run('동료 한 줄 피드백', 13)),
     ...(x.feedback.length ? x.feedback.map(e => para(run(`· ${e.feedback}`))) : [para(run('· 없음'))])
@@ -2473,6 +2698,7 @@ function renderAll() {
   renderDashboard();
   renderLive();
   liveSync();
+  renderSlides();
 }
 showCourseSaved(false);
 resetTimer();
